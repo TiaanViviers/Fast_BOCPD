@@ -1,6 +1,6 @@
 import math
 import numpy as np
-from typing import Any, Optional, Tuple, List
+from typing import Any, Optional, Tuple, List, Union
 
 
 def _logsumexp(arr: np.ndarray) -> float:
@@ -63,7 +63,7 @@ class BOCPD:
         self.stats = [None] * (self.max_run_length + 1)
         self.stats[0] = self.obs_model.prior_stats()
 
-    def update(self, x: float) -> Tuple[np.ndarray, float]:
+    def update(self, x: Union[float, np.ndarray]) -> Tuple[np.ndarray, float]:
         """
         Process one new observation x_t.
 
@@ -76,6 +76,8 @@ class BOCPD:
         new_stats: List[Optional[Any]] = [None] * (R + 1)
 
         prior_stats = self.obs_model.prior_stats()
+        # Set new_stats[0] once - same for all changepoint paths
+        new_stats[0] = prior_stats
 
         for r_prev in range(R + 1):
             lj_prev = self.log_joint[r_prev]
@@ -86,15 +88,17 @@ class BOCPD:
             if stats_prev is None:
                 continue
 
-            # 1) predictive log likelihood under this run hypothesis
+            # Predictive log likelihood under current run hypothesis
             log_pred = self.obs_model.predictive_logpdf(stats_prev, x)
 
             # 2) changepoint branch: r_t = 0
-            logp_cp = lj_prev + log_pred + self.hazard.log_transition_cp(r_prev)
+            # At changepoint, predict x under the PRIOR (not under r_prev's stats)
+            log_pred_cp = self.obs_model.predictive_logpdf(prior_stats, x)
+            logp_cp = lj_prev + log_pred_cp + self.hazard.log_transition_cp(r_prev)
             new_log_joint[0] = _logsumexp_pair(new_log_joint[0], logp_cp)
-            new_stats[0] = prior_stats  # same for all cp paths
 
             # 3) continuation branch: r_t = r_prev + 1
+            # At continuation, predict x under current run's stats
             r_cont = r_prev + 1
             if r_cont <= R:
                 logp_cont = lj_prev + log_pred + self.hazard.log_transition_cont(r_prev)
