@@ -5,6 +5,20 @@ __pycache__/
 
 # C extensions
 *.so
+*.dylib
+*.dll
+
+# C object files and build artifacts
+*.o
+*.a
+*.out
+*.exe
+
+# C library build files (keep source, ignore compiled)
+fast_bocpd/_c/libbocpd.so
+fast_bocpd/_c/*.o
+tests/c_tests/test_modules
+tests/c_tests/*.o
 
 # Distribution / packaging
 .Python
@@ -205,3 +219,11 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# macOS
+.DS_Store
+
+# Editor backups
+*~
+*.swp
+*.swo
