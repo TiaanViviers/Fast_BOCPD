@@ -48,7 +48,7 @@ import numpy as np
 
 # Set up the model
 obs_model = GaussianNIG(mu0=0.0, kappa0=1.0, alpha0=1.0, beta0=1.0)
-hazard = ConstantHazard(lambda_=100)  # Expected run length
+hazard = ConstantHazard(lambda_=100)  # Expected run length = 100
 bocpd = BOCPD(obs_model, hazard, max_run_length=200)
 
 # Online mode - process one observation at a time
@@ -59,6 +59,30 @@ for x in data_stream:
 
 # Offline mode - process all data at once
 cp_probs = bocpd.batch_update(data_array)
+```
+
+### Using OnlineChangeDetector (Recommended for Streaming)
+
+```python
+from fast_bocpd import BOCPD, GaussianNIG, ConstantHazard, OnlineChangeDetector
+
+# Setup
+bocpd = BOCPD(GaussianNIG(...), ConstantHazard(100))
+detector = OnlineChangeDetector(bocpd, min_confidence=0.3)
+
+# Process streaming data
+for t, observation in enumerate(data_stream):
+    cp = detector.update(observation, metadata=f"sample_{t}")
+    
+    if cp:
+        print(f"Changepoint at t={cp.index}: previous segment lasted {cp.prev_run_length} steps")
+    
+    # Check current run length
+    run_length = detector.get_current_run_length()
+    
+# Get all detected changepoints and segments
+changepoints = detector.get_changepoints()
+segments = detector.get_segments()
 ```
 
 ## Project Structure
@@ -94,22 +118,32 @@ Fast_BOCPD/
 
 ## Development
 
-### Run tests
+### Quick Start
 
 ```bash
-# Install dev dependencies
-pip install pytest pytest-cov
+# Clone the repository
+git clone https://github.com/yourusername/Fast_BOCPD.git
+cd Fast_BOCPD
 
-# Run Python tests
-pytest
-
-# Run Python tests with coverage
-pytest --cov=fast_bocpd --cov-report=html
-
-# Run C unit tests
-cd tests/c_tests
+# Run all tests
 make test
+
+# Or run separately
+make test-c       # C unit tests
+make test-python  # Python integration tests
+
+# Build shared library for development
+make lib
+
+# Clean build artifacts
+make clean
 ```
+
+### Development Workflow
+
+1. **Edit C code**: Modify files in `fast_bocpd/_c/`
+2. **Test changes**: Run `make test`
+3. **Install for Python**: Run `pip install -e .`
 
 ### Test Structure
 
@@ -125,9 +159,22 @@ tests/
     ├── test_gaussian_nig.c    # GaussianNIG tests
     ├── test_hazard.c          # Hazard function tests
     ├── test_bocpd_core.c      # BOCPD algorithm tests
-    ├── test_runner.c          # Test suite runner
-    └── Makefile
+    └── test_runner.c          # Test suite runner
 ```
+
+### Build System
+
+All build artifacts are placed in `build/`:
+```
+build/
+├── lib/          # Compiled libraries
+└── obj/          # Object files
+```
+
+The root `Makefile` provides:
+- `make lib` - Build shared library
+- `make test` - Run all tests
+- `make clean` - Remove all artifacts
 
 ### Project Structure
 

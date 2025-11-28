@@ -14,10 +14,13 @@ __pycache__/
 *.out
 *.exe
 
-# C library build files (keep source, ignore compiled)
+# Build directory (unified build artifacts)
+build/
+
+# Legacy C library build files (if any remain)
 fast_bocpd/_c/libbocpd.so
 fast_bocpd/_c/*.o
-tests/c_tests/test_modules
+tests/c_tests/test_runner
 tests/c_tests/*.o
 
 # Distribution / packaging

@@ -256,3 +256,33 @@ int bocpd_batch_update(
     }
     return 0;
 }
+
+int32_t bocpd_get_map_run_length(const BOCPDState* state) {
+    if (!state || !state->posterior_r) {
+        return -1;
+    }
+    
+    int32_t max_r = 0;
+    double max_prob = state->posterior_r[0];
+    
+    for (int32_t r = 1; r <= state->max_run_length; r++) {
+        if (state->posterior_r[r] > max_prob) {
+            max_prob = state->posterior_r[r];
+            max_r = r;
+        }
+    }
+    
+    return max_r;
+}
+
+int bocpd_get_posterior(const BOCPDState* state, double* posterior_out) {
+    if (!state || !state->posterior_r || !posterior_out) {
+        return -1;
+    }
+    
+    for (int32_t r = 0; r <= state->max_run_length; r++) {
+        posterior_out[r] = state->posterior_r[r];
+    }
+    
+    return 0;
+}

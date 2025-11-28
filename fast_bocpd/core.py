@@ -136,6 +136,59 @@ class BOCPD:
         
         return cp_probs
     
+    def get_map_run_length(self) -> int:
+        """
+        Get the most likely (MAP) run length at current time.
+        
+        Returns:
+            Most likely run length (0 means changepoint just occurred)
+            
+        Example:
+            >>> map_r = bocpd.get_map_run_length()
+            >>> if map_r == 0:
+            ...     print("Changepoint detected!")
+            >>> else:
+            ...     print(f"Current regime is {map_r} observations old")
+        """
+        r_map = _bindings._lib.bocpd_get_map_run_length(ctypes.byref(self._state))
+        if r_map < 0:
+            raise RuntimeError("Failed to get MAP run length")
+        return r_map
+    
+    def get_map_confidence(self) -> float:
+        """
+        Get confidence in the MAP run length estimate.
+        
+        Returns:
+            Probability mass at MAP run length (higher = more confident)
+            
+        Example:
+            >>> map_r = bocpd.get_map_run_length()
+            >>> confidence = bocpd.get_map_confidence()
+            >>> print(f"MAP estimate: r={map_r} (confidence: {confidence:.1%})")
+        """
+        posterior = self.get_posterior()
+        map_r = self.get_map_run_length()
+        return posterior[map_r]
+    
+    def get_posterior(self) -> np.ndarray:
+        """
+        Get current posterior distribution over run lengths.
+        
+        Returns:
+            posterior_r: Array of P(r_t = r | data) for r in [0, max_run_length]
+        """
+        posterior = np.zeros(self.max_run_length + 1, dtype=np.float64)
+        ret = _bindings._lib.bocpd_get_posterior(
+            ctypes.byref(self._state),
+            posterior.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
+        )
+        
+        if ret != 0:
+            raise RuntimeError("Failed to get posterior")
+        
+        return posterior
+    
     def __del__(self):
         """Cleanup C resources."""
         if self._state is not None:

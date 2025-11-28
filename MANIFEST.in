@@ -2,5 +2,7 @@ include README.md
 include LICENSE
 recursive-include fast_bocpd/_c *.c *.h
 exclude fast_bocpd/_c/*.o
-exclude fast_bocpd/_c/libbocpd.so
+exclude fast_bocpd/_c/*.so
 prune tests
+prune build
+exclude Makefile

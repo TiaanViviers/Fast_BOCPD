@@ -129,4 +129,21 @@ int bocpd_batch_update(
     double* cp_probs_out
 );
 
+/**
+ * Get maximum a posteriori (MAP) run length at current time
+ * 
+ * @param state    BOCPD state structure
+ * @return         Most likely run length, or -1 on error
+ */
+int32_t bocpd_get_map_run_length(const BOCPDState* state);
+
+/**
+ * Get current posterior distribution over run lengths
+ * 
+ * @param state         BOCPD state structure
+ * @param posterior_out Output array (size max_run_length + 1)
+ * @return              0 on success, -1 on error
+ */
+int bocpd_get_posterior(const BOCPDState* state, double* posterior_out);
+
 #endif // BOCPD_CORE_H

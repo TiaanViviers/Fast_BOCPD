@@ -20,7 +20,16 @@ def _load_library():
     except (ImportError, OSError):
         pass
     
-    # Try 2: Manually built shared library (development mode)
+    # Try 2: Built with root Makefile (development mode)
+    _ROOT_DIR = Path(__file__).parent.parent
+    lib_path = _ROOT_DIR / "build" / "lib" / "libbocpd.so"
+    if lib_path.exists():
+        try:
+            return ctypes.CDLL(str(lib_path))
+        except OSError:
+            pass
+    
+    # Try 3: Manually built shared library (legacy)
     _LIB_DIR = Path(__file__).parent / "_c"
     _LIB_NAME = "libbocpd"
     for ext in ['.so', '.dylib', '.dll']:
@@ -158,6 +167,17 @@ if _lib is not None:
         ctypes.POINTER(ctypes.c_double)
     ]
     _lib.bocpd_batch_update.restype = ctypes.c_int
+
+    # bocpd_get_map_run_length
+    _lib.bocpd_get_map_run_length.argtypes = [ctypes.POINTER(BOCPDState)]
+    _lib.bocpd_get_map_run_length.restype = ctypes.c_int32
+
+    # bocpd_get_posterior
+    _lib.bocpd_get_posterior.argtypes = [
+        ctypes.POINTER(BOCPDState),
+        ctypes.POINTER(ctypes.c_double)
+    ]
+    _lib.bocpd_get_posterior.restype = ctypes.c_int
 
 
 # ============================================================================

@@ -176,6 +176,64 @@ int test_bocpd_known_values() {
     return 0;
 }
 
+int test_get_map_run_length() {
+    BOCPDState state;
+    GaussianNIGParams obs_params = {
+        .mu0 = 0.0, .kappa0 = 1.0, .alpha0 = 1.0, .beta0 = 1.0
+    };
+    ConstantHazardParams hazard_params;
+    constant_hazard_init(&hazard_params, 100.0);
+    bocpd_init(&state, OBS_MODEL_GAUSSIAN_NIG, &obs_params,
+               HAZARD_CONSTANT, &hazard_params, 50);
+    
+    // Initially should be at r=0
+    int32_t map_r = bocpd_get_map_run_length(&state);
+    ASSERT_EQ(map_r, 0);
+    
+    // After constant observations, should increase
+    double cp_prob;
+    for (int i = 0; i < 10; i++) {
+        bocpd_update(&state, 0.1, &cp_prob);
+    }
+    
+    map_r = bocpd_get_map_run_length(&state);
+    ASSERT_TRUE(map_r > 5);  // Should have grown
+    
+    bocpd_free(&state);
+    TEST_PASS("MAP run length tracking");
+    return 0;
+}
+
+int test_get_posterior() {
+    BOCPDState state;
+    GaussianNIGParams obs_params = {
+        .mu0 = 0.0, .kappa0 = 1.0, .alpha0 = 1.0, .beta0 = 1.0
+    };
+    ConstantHazardParams hazard_params;
+    constant_hazard_init(&hazard_params, 100.0);
+    bocpd_init(&state, OBS_MODEL_GAUSSIAN_NIG, &obs_params,
+               HAZARD_CONSTANT, &hazard_params, 50);
+    
+    double cp_prob;
+    bocpd_update(&state, 0.5, &cp_prob);
+    
+    double posterior[51];
+    int ret = bocpd_get_posterior(&state, posterior);
+    ASSERT_EQ(ret, 0);
+    
+    // Posterior should sum to 1
+    double sum = 0.0;
+    for (int r = 0; r <= 50; r++) {
+        sum += posterior[r];
+        ASSERT_TRUE(posterior[r] >= 0.0);  // All non-negative
+    }
+    ASSERT_CLOSE(sum, 1.0, 1e-6);
+    
+    bocpd_free(&state);
+    TEST_PASS("Get posterior distribution");
+    return 0;
+}
+
 /* Main test suite runner */
 int run_bocpd_core_tests() {
     TEST_SUITE("BOCPD Core");
@@ -187,6 +245,8 @@ int run_bocpd_core_tests() {
     if (test_bocpd_changepoint_detection() != 0) return 1;
     if (test_bocpd_batch_update() != 0) return 1;
     if (test_bocpd_known_values() != 0) return 1;
+    if (test_get_map_run_length() != 0) return 1;
+    if (test_get_posterior() != 0) return 1;
     
     return 0;
 }
