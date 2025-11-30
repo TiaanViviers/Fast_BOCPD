@@ -78,7 +78,6 @@ Work through these in order for the best learning experience:
 - Data preprocessing
 - Detecting volatility regime changes
 - Interpreting results
-- Production-ready code template
 
 **Best for:** See how it works on real data
 
