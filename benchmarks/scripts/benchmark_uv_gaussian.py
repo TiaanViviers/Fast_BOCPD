@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Univariate Gaussian Benchmark Script for Fast-BOCPD
 
