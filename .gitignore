@@ -6,6 +6,8 @@ __pycache__/
 # Data files
 *.csv
 *.txt
+*.npy
+
 # C extensions
 *.so
 *.dylib
