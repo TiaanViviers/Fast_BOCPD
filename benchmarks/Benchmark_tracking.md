@@ -41,18 +41,18 @@ We also track the performance of each distribution type we support in each respe
 **Lambda:** 150 | **Runs:** 10 | **Warmup:** 2 <br />
 **Datasets**: 1k, 10k, 100k <br />
 
-| Size | Mode | Median (s) | Throughput | CV% | vs v0.1.0 |
+| Size | Mode | Median (s) | Throughput | CV% | Change |
 |---|---|---|---|---|---|
-| 1k | Online | 0.0423 | 23,637/s | 0.2% | **+110%** ⚡⚡ |
-| | Batch | 0.0331 | 30,245/s | 0.1% | **+108%** ⚡⚡ |
-| 10k | Online | 0.5135 | 19,473/s | 0.1% | **+64%** ⚡ |
-| | Batch | 0.4198 | 23,819/s | 0.2% | **+2%** ≈ |
-| 100k | Online | 5.2430 | 19,073/s | 0.1% | **+1%** ≈ |
-| | Batch | 4.2921 | 23,299/s | 0.0% | **+1%** ≈ |
+| 1k | Online | 0.0423 | 23,637/s | 0.2% | **+110%** |
+| | Batch | 0.0331 | 30,245/s | 0.1% | **+108%** |
+| 10k | Online | 0.5135 | 19,473/s | 0.1% | **+64%** |
+| | Batch | 0.4198 | 23,819/s | 0.2% | **+2%** |
+| 100k | Online | 5.2430 | 19,073/s | 0.1% | **+1%** |
+| | Batch | 4.2921 | 23,299/s | 0.0% | **+1%** |
 
 **Key Observations:**
 - **Massive gains on small datasets (1k):** 2.1x faster across the board.
-- **Strong gains on medium datasets (10k online):** 1.64x faster for real-time use case
+- **Strong gains on medium datasets (10k online):** 1.64x faster for online use case
 - **Large datasets (100k):** Essentially unchanged (within measurement variance)
 - **10k online stability FIXED:** CV% dropped from 32.6% to 0.1%
 - **All measurements highly stable:** CV% ≤ 0.2% across the board
