@@ -2,8 +2,10 @@
 # ===================================
 
 CC = gcc
-CFLAGS = -Wall -Wextra -std=c99 -O2 -g -fPIC
-LDFLAGS = -lm
+CFLAGS = -std=c99 -O3 -march=native -fomit-frame-pointer -Wall -Wextra -fPIC
+# Note: -ffast-math and -funroll-loops tested but reduced performance
+INCLUDES = -I$(shell python3 -c "import numpy; print(numpy.get_include())")
+LDFLAGS = -shared -lm
 
 # Directories
 SRC_DIR = fast_bocpd/_c
@@ -24,7 +26,7 @@ TEST_OBJS = $(patsubst $(TEST_DIR)/%.c,$(OBJ_DIR)/%.o,$(TEST_SRCS))
 LIB_TARGET = $(LIB_DIR)/libbocpd.so
 TEST_RUNNER = $(BUILD_DIR)/test_runner
 
-.PHONY: all lib test test-c test-python clean help
+.PHONY: all lib test test-c test-python benchmark clean help
 
 # Default target
 all: help
@@ -67,6 +69,10 @@ test-python:
 # Run all tests (C + Python)
 test: test-c test-python
 
+# Run benchmarks
+benchmark: 
+	cd benchmarks && ./benchmark.sh && cd ..
+
 # Clean all build artifacts
 clean:
 	rm -rf $(BUILD_DIR)
@@ -87,6 +93,7 @@ help:
 	@echo "  make test         Run all tests (C + Python)"
 	@echo "  make test-c       Run C unit tests only"
 	@echo "  make test-python  Run Python tests only"
+	@echo "  make benchmark    Run benchmarks"
 	@echo "  make clean        Remove all build artifacts"
 	@echo "  make help         Show this help message"
 	@echo ""

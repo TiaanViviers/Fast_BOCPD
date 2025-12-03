@@ -10,7 +10,14 @@ ext_module = Extension(
         'fast_bocpd/_c/hazard.c',
     ],
     include_dirs=[np.get_include()],
-    extra_compile_args=['-std=c99', '-O3', '-Wall', '-Wextra'],
+    extra_compile_args=[
+        '-std=c99',
+        '-O3',
+        '-march=native',
+        '-fomit-frame-pointer',
+        '-Wall',
+        '-Wextra',
+    ],
     extra_link_args=['-lm'],
 )
 

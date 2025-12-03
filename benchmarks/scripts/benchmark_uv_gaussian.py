@@ -113,7 +113,8 @@ def main():
     parser.add_argument('--size', type=int, choices=[1000, 10000, 100000], help='Run specific size only')
     args = parser.parse_args()
     
-    data_dir = Path(__file__).parent.parent / 'data'
+    # Use absolute path to avoid cProfile issues
+    data_dir = Path(__file__).resolve().parent.parent / 'data'
     datasets = {
         '1k':    data_dir / 'data_uv_gaussian_n1000_seg150.npy',
         '10k':   data_dir / 'data_uv_gaussian_n10000_seg150.npy',
