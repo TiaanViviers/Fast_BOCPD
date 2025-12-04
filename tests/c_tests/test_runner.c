@@ -4,6 +4,7 @@
 /* Declare test suite runners */
 int run_gaussian_nig_tests();
 int run_student_t_ng_tests();
+int run_student_t_ng_grid_tests();
 int run_hazard_tests();
 int run_bocpd_core_tests();
 
@@ -22,6 +23,7 @@ int main() {
     int failed = 0;
     failed += run_gaussian_nig_tests();
     failed += run_student_t_ng_tests();
+    failed += run_student_t_ng_grid_tests();
     failed += run_hazard_tests();
     failed += run_bocpd_core_tests();
     

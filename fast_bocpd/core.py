@@ -55,14 +55,33 @@ class BOCPD:
                 beta0=self.obs_model.beta0
             )
         elif isinstance(self.obs_model, StudentTNG):
-            obs_model_type = _bindings.OBS_MODEL_STUDENT_T_NG
-            obs_params = _bindings.StudentTNGParams(
-                mu0=self.obs_model.mu0,
-                kappa0=self.obs_model.kappa0,
-                alpha0=self.obs_model.alpha0,
-                beta0=self.obs_model.beta0,
-                nu=self.obs_model.nu
-            )
+            if self.obs_model.is_grid:
+                # Grid Student-t mode
+                obs_model_type = _bindings.OBS_MODEL_STUDENT_T_NG_GRID
+                
+                # Ensure contiguous arrays and keep them alive (C will deep-copy but needs contiguous input)
+                self._nu_grid_arr = np.ascontiguousarray(self.obs_model.nu_grid, dtype=np.float64)
+                self._nu_prior_arr = np.ascontiguousarray(self.obs_model.nu_prior, dtype=np.float64)
+                
+                obs_params = _bindings.StudentTNGGridParams(
+                    mu0=self.obs_model.mu0,
+                    kappa0=self.obs_model.kappa0,
+                    alpha0=self.obs_model.alpha0,
+                    beta0=self.obs_model.beta0,
+                    K=self.obs_model.K,
+                    nu_grid=self._nu_grid_arr.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
+                    nu_prior=self._nu_prior_arr.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
+                )
+            else:
+                # Fixed ν mode
+                obs_model_type = _bindings.OBS_MODEL_STUDENT_T_NG
+                obs_params = _bindings.StudentTNGParams(
+                    mu0=self.obs_model.mu0,
+                    kappa0=self.obs_model.kappa0,
+                    alpha0=self.obs_model.alpha0,
+                    beta0=self.obs_model.beta0,
+                    nu=self.obs_model.nu
+                )
         else:
             raise ValueError(f"Unsupported observation model: {type(self.obs_model)}")
         
@@ -74,18 +93,29 @@ class BOCPD:
         if ret != 0:
             raise RuntimeError("Failed to initialize hazard function")
         
+        # Validate max_run_length
+        if self.max_run_length <= 0:
+            raise ValueError("max_run_length must be > 0")
+        
         # Initialize BOCPD state
         self._state = _bindings.BOCPDState()
+        
+        # Cast params to void* for C function (safer than implicit conversion)
+        obs_params_ptr = ctypes.cast(ctypes.byref(obs_params), ctypes.c_void_p)
+        haz_params_ptr = ctypes.cast(ctypes.byref(hazard_params), ctypes.c_void_p)
+        
         ret = _bindings._lib.bocpd_init(
             ctypes.byref(self._state),
             obs_model_type,
-            ctypes.byref(obs_params),
+            obs_params_ptr,
             _bindings.HAZARD_CONSTANT,
-            ctypes.byref(hazard_params),
+            haz_params_ptr,
             self.max_run_length
         )
         
         if ret != 0:
+            # Free any partially allocated resources
+            self.close()
             raise RuntimeError("Failed to initialize BOCPD")
     
     def reset(self) -> None:
@@ -131,7 +161,7 @@ class BOCPD:
         Returns:
             cp_probs: Array of changepoint probabilities for each time step
         """
-        data = np.asarray(data, dtype=np.float64)
+        data = np.ascontiguousarray(data, dtype=np.float64)
         cp_probs = np.zeros(len(data), dtype=np.float64)
         
         ret = _bindings._lib.bocpd_batch_update(
@@ -199,12 +229,41 @@ class BOCPD:
         
         return posterior
     
+    def close(self):
+        """Explicitly free C resources (recommended for deterministic cleanup)."""
+        if hasattr(self, '_state') and self._state is not None:
+            lib = getattr(_bindings, '_lib', None)
+            if lib is not None:
+                try:
+                    lib.bocpd_free(ctypes.byref(self._state))
+                except Exception:
+                    pass
+            self._state = None
+        
+        # Clean up grid arrays if present
+        if hasattr(self, '_nu_grid_arr'):
+            del self._nu_grid_arr
+        if hasattr(self, '_nu_prior_arr'):
+            del self._nu_prior_arr
+    
+    def __enter__(self):
+        """Context manager entry."""
+        return self
+    
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Context manager exit."""
+        self.close()
+        return False
+    
     def __del__(self):
-        """Cleanup C resources."""
-        if self._state is not None:
+        """Cleanup C resources (fallback if close() not called)."""
+        # Safe cleanup during interpreter shutdown
+        st = getattr(self, "_state", None)
+        lib = getattr(_bindings, "_lib", None)
+        if st is not None and lib is not None:
             try:
-                _bindings._lib.bocpd_free(ctypes.byref(self._state))
-            except:
+                lib.bocpd_free(ctypes.byref(st))
+            except Exception:
                 pass
 
 

@@ -5,6 +5,7 @@
 #include <stddef.h>
 #include "gaussian_nig.h"
 #include "student_t_ng.h"
+#include "student_t_ng_grid.h"
 #include "hazard.h"
 
 /**
@@ -47,9 +48,9 @@ static inline const void* cstats_at(const uint8_t* base, size_t r, size_t stride
  * Observation model types
  */
 typedef enum {
-    OBS_MODEL_GAUSSIAN_NIG,
-    OBS_MODEL_STUDENT_T_NG,
-    // Future: OBS_MODEL_POISSON_GAMMA, OBS_MODEL_BERNOULLI_BETA, etc.
+    OBS_MODEL_GAUSSIAN_NIG = 0,
+    OBS_MODEL_STUDENT_T_NG = 1,
+    OBS_MODEL_STUDENT_T_NG_GRID = 2
 } ObsModelType;
 
 /**
@@ -66,17 +67,8 @@ typedef enum {
 typedef union {
     GaussianNIGParams gaussian_nig;
     StudentTNGParams student_t_ng;
-    // Future models will be added here
+    StudentTNGGridParams student_t_ng_grid;
 } ObsModelParams;
-
-/**
- * Union for observation model statistics
- */
-typedef union {
-    GaussianNIGStats gaussian_nig;
-    StudentTNGStats student_t_ng;
-    // Future model stats will be added here
-} ObsModelStats;
 
 /**
  * Union for hazard parameters
@@ -112,6 +104,10 @@ typedef struct {
     double* new_log_joint;          // [size: max_run_length + 1]
     uint8_t* new_stats;             // [size: (max_run_length + 1) * stats_size]
     double* posterior_r;            // Output buffer [size: max_run_length + 1]
+    
+    // Grid Student-t ownership (NULL for non-grid models)
+    double* owned_nu_grid;          // Deep copy of nu_grid (for grid model only)
+    double* owned_nu_prior;         // Normalized copy of nu_prior (for grid model only)
 } BOCPDState;
 
 /**

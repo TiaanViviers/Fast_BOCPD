@@ -15,12 +15,12 @@ OBJ_DIR = $(BUILD_DIR)/obj
 LIB_DIR = $(BUILD_DIR)/lib
 
 # Source files
-IMPL_SRCS = $(SRC_DIR)/gaussian_nig.c $(SRC_DIR)/hazard.c $(SRC_DIR)/bocpd_core.c $(SRC_DIR)/student_t_ng.c
-IMPL_OBJS = $(OBJ_DIR)/gaussian_nig.o $(OBJ_DIR)/hazard.o $(OBJ_DIR)/bocpd_core.o $(OBJ_DIR)/student_t_ng.o
+IMPL_SRCS = $(SRC_DIR)/gaussian_nig.c $(SRC_DIR)/hazard.c $(SRC_DIR)/bocpd_core.c $(SRC_DIR)/student_t_ng.c $(SRC_DIR)/student_t_ng_grid.c
+IMPL_OBJS = $(OBJ_DIR)/gaussian_nig.o $(OBJ_DIR)/hazard.o $(OBJ_DIR)/bocpd_core.o $(OBJ_DIR)/student_t_ng.o $(OBJ_DIR)/student_t_ng_grid.o
 
 TEST_SRCS = $(TEST_DIR)/test_gaussian_nig.c $(TEST_DIR)/test_student_t_ng.c \
-            $(TEST_DIR)/test_hazard.c $(TEST_DIR)/test_bocpd_core.c \
-            $(TEST_DIR)/test_runner.c
+            $(TEST_DIR)/test_student_t_ng_grid.c $(TEST_DIR)/test_hazard.c \
+            $(TEST_DIR)/test_bocpd_core.c $(TEST_DIR)/test_runner.c
 TEST_OBJS = $(patsubst $(TEST_DIR)/%.c,$(OBJ_DIR)/%.o,$(TEST_SRCS))
 
 # Targets

@@ -89,6 +89,19 @@ class StudentTNGStats(ctypes.Structure):
     ]
 
 
+class StudentTNGGridParams(ctypes.Structure):
+    """Matches StudentTNGGridParams in C"""
+    _fields_ = [
+        ("mu0", ctypes.c_double),
+        ("kappa0", ctypes.c_double),
+        ("alpha0", ctypes.c_double),
+        ("beta0", ctypes.c_double),
+        ("K", ctypes.c_int32),
+        ("nu_grid", ctypes.POINTER(ctypes.c_double)),
+        ("nu_prior", ctypes.POINTER(ctypes.c_double)),
+    ]
+
+
 class ConstantHazardParams(ctypes.Structure):
     """Matches ConstantHazardParams in C"""
     _fields_ = [
@@ -103,14 +116,7 @@ class ObsModelParams(ctypes.Union):
     _fields_ = [
         ("gaussian_nig", GaussianNIGParams),
         ("student_t_ng", StudentTNGParams),
-    ]
-
-
-class ObsModelStats(ctypes.Union):
-    """Matches ObsModelStats union in C"""
-    _fields_ = [
-        ("gaussian_nig", GaussianNIGStats),
-        ("student_t_ng", StudentTNGStats),
+        ("student_t_ng_grid", StudentTNGGridParams),
     ]
 
 
@@ -147,12 +153,15 @@ class BOCPDState(ctypes.Structure):
         ("new_log_joint", ctypes.POINTER(ctypes.c_double)),
         ("new_stats", ctypes.POINTER(ctypes.c_uint8)),  # byte buffer now
         ("posterior_r", ctypes.POINTER(ctypes.c_double)),
+        ("owned_nu_grid", ctypes.POINTER(ctypes.c_double)),  # Grid ownership
+        ("owned_nu_prior", ctypes.POINTER(ctypes.c_double)),  # Grid ownership
     ]
 
 
 # Enums (must match C)
 OBS_MODEL_GAUSSIAN_NIG = 0
 OBS_MODEL_STUDENT_T_NG = 1
+OBS_MODEL_STUDENT_T_NG_GRID = 2
 HAZARD_CONSTANT = 0
 
 

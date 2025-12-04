@@ -1,17 +1,22 @@
 #include "bocpd_core.h"
 #include <stdlib.h>
 #include <stddef.h>
+#include <stdint.h>
 #include <string.h>
 #include <math.h>
 
+#if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L
+    #include <stdalign.h>
+#endif
+
 /**
  * Alignment for stats buffers (use max_align_t for maximum portability)
- * C11 has _Alignof and max_align_t, C99 fallback to sizeof(max_align_t) or 16
+ * C11 has _Alignof and max_align_t, C99 fallback to 16 (practical assumption)
  */
 #if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L
     #define STATS_ALIGNMENT _Alignof(max_align_t)
 #else
-    #define STATS_ALIGNMENT 16  // Safe fallback: malloc guarantees this on most platforms
+    #define STATS_ALIGNMENT 16  // Practical fallback: works on most platforms
 #endif
 
 /**
@@ -81,6 +86,28 @@ static void student_t_ng_copy_stats_fn(void* dst, const void* src, const void* p
     memcpy(dst, src, sizeof(StudentTNGStats));
 }
 
+/* Student-t NG Grid vtable functions */
+static size_t student_t_ng_grid_stats_size_fn(const void* params) {
+    const StudentTNGGridParams* p = (const StudentTNGGridParams*)params;
+    return student_t_ng_grid_stats_size(p->K);
+}
+
+static void student_t_ng_grid_prior_stats_fn(void* stats, const void* params) {
+    student_t_ng_grid_prior_stats(stats, (const StudentTNGGridParams*)params);
+}
+
+static void student_t_ng_grid_update_stats_fn(void* stats, const void* params, double x) {
+    student_t_ng_grid_update_stats(stats, (const StudentTNGGridParams*)params, x);
+}
+
+static double student_t_ng_grid_predictive_logpdf_fn(const void* stats, const void* params, double x) {
+    return student_t_ng_grid_predictive_logpdf(stats, (const StudentTNGGridParams*)params, x);
+}
+
+static void student_t_ng_grid_copy_stats_fn(void* dst, const void* src, const void* params) {
+    student_t_ng_grid_copy_stats(dst, src, (const StudentTNGGridParams*)params);
+}
+
 /**
  * Initialize vtable for a given observation model type
  */
@@ -100,6 +127,14 @@ static void init_obs_vtable(ObsModelVTable* vtable, ObsModelType type) {
             vtable->update_stats = student_t_ng_update_stats_fn;
             vtable->predictive_logpdf = student_t_ng_predictive_logpdf_fn;
             vtable->copy_stats = student_t_ng_copy_stats_fn;
+            break;
+        
+        case OBS_MODEL_STUDENT_T_NG_GRID:
+            vtable->stats_size = student_t_ng_grid_stats_size_fn;
+            vtable->prior_stats = student_t_ng_grid_prior_stats_fn;
+            vtable->update_stats = student_t_ng_grid_update_stats_fn;
+            vtable->predictive_logpdf = student_t_ng_grid_predictive_logpdf_fn;
+            vtable->copy_stats = student_t_ng_grid_copy_stats_fn;
             break;
         
         default:
@@ -157,9 +192,13 @@ int bocpd_init(BOCPDState* state, ObsModelType obs_model_type,
     const void* obs_params, HazardType hazard_type, const void* hazard_params,
     int32_t max_run_length) 
 {
-    if (max_run_length <= 0) {
+    // Guard against overflow in (max_run_length + 1)
+    if (max_run_length <= 0 || max_run_length >= INT32_MAX) {
         return -1;
     }
+    
+    // Initialize all pointers to NULL for safe bocpd_free() on failure
+    memset(state, 0, sizeof(*state));
     
     state->max_run_length = max_run_length;
     state->obs_model_type = obs_model_type;
@@ -170,9 +209,55 @@ int bocpd_init(BOCPDState* state, ObsModelType obs_model_type,
         case OBS_MODEL_GAUSSIAN_NIG:
             state->obs_params.gaussian_nig = *(const GaussianNIGParams*)obs_params;
             break;
+            
         case OBS_MODEL_STUDENT_T_NG:
             state->obs_params.student_t_ng = *(const StudentTNGParams*)obs_params;
             break;
+            
+        case OBS_MODEL_STUDENT_T_NG_GRID: {
+            const StudentTNGGridParams* grid_params = (const StudentTNGGridParams*)obs_params;
+            
+            // Validate grid parameters
+            if (student_t_ng_grid_validate_params(grid_params) != 0) {
+                return -1;
+            }
+            
+            int32_t K = grid_params->K;
+            
+            // Deep copy nu_grid (borrowed from Python)
+            state->owned_nu_grid = (double*)malloc(K * sizeof(double));
+            if (!state->owned_nu_grid) {
+                return -1;
+            }
+            memcpy(state->owned_nu_grid, grid_params->nu_grid, K * sizeof(double));
+            
+            // Normalize and deep copy nu_prior
+            state->owned_nu_prior = (double*)malloc(K * sizeof(double));
+            if (!state->owned_nu_prior) {
+                free(state->owned_nu_grid);
+                state->owned_nu_grid = NULL;
+                return -1;
+            }
+            
+            if (student_t_ng_grid_normalize_prior(grid_params->nu_prior, K, state->owned_nu_prior) != 0) {
+                free(state->owned_nu_grid);
+                free(state->owned_nu_prior);
+                state->owned_nu_grid = NULL;
+                state->owned_nu_prior = NULL;
+                return -1;
+            }
+            
+            // Copy params struct with owned pointers
+            state->obs_params.student_t_ng_grid.mu0 = grid_params->mu0;
+            state->obs_params.student_t_ng_grid.kappa0 = grid_params->kappa0;
+            state->obs_params.student_t_ng_grid.alpha0 = grid_params->alpha0;
+            state->obs_params.student_t_ng_grid.beta0 = grid_params->beta0;
+            state->obs_params.student_t_ng_grid.K = K;
+            state->obs_params.student_t_ng_grid.nu_grid = state->owned_nu_grid;
+            state->obs_params.student_t_ng_grid.nu_prior = state->owned_nu_prior;
+            break;
+        }
+            
         default:
             return -1;  // Unknown model type
     }
@@ -185,6 +270,7 @@ int bocpd_init(BOCPDState* state, ObsModelType obs_model_type,
             break;
         }
         default:
+            bocpd_free(state);  // Clean up any allocated owned pointers
             return -1;  // Unknown hazard type
     }
     
@@ -197,12 +283,23 @@ int bocpd_init(BOCPDState* state, ObsModelType obs_model_type,
     
     // Allocate arrays (size: max_run_length + 1)
     int32_t size = max_run_length + 1;
+    size_t n_blobs = (size_t)size;
     
-    state->log_joint = (double*)malloc(size * sizeof(double));
-    state->new_log_joint = (double*)malloc(size * sizeof(double));
-    state->posterior_r = (double*)malloc(size * sizeof(double));
-    state->stats = (uint8_t*)malloc(size * state->stats_size);
-    state->new_stats = (uint8_t*)malloc(size * state->stats_size);
+    // Check for size_t overflow in allocations
+    if (state->stats_size != 0 && n_blobs > (SIZE_MAX / state->stats_size)) {
+        bocpd_free(state);
+        return -1;  // Overflow in stats buffer size
+    }
+    if (n_blobs > (SIZE_MAX / sizeof(double))) {
+        bocpd_free(state);
+        return -1;  // Overflow in double buffer size
+    }
+    
+    state->log_joint = (double*)malloc(n_blobs * sizeof(double));
+    state->new_log_joint = (double*)malloc(n_blobs * sizeof(double));
+    state->posterior_r = (double*)malloc(n_blobs * sizeof(double));
+    state->stats = (uint8_t*)malloc(n_blobs * state->stats_size);
+    state->new_stats = (uint8_t*)malloc(n_blobs * state->stats_size);
     
     if (!state->log_joint || !state->new_log_joint || !state->posterior_r ||
         !state->stats || !state->new_stats) {
@@ -224,11 +321,17 @@ void bocpd_free(BOCPDState* state)
     if (state->stats) free(state->stats);
     if (state->new_stats) free(state->new_stats);
     
+    // Free owned grid arrays if present
+    if (state->owned_nu_grid) free(state->owned_nu_grid);
+    if (state->owned_nu_prior) free(state->owned_nu_prior);
+    
     state->log_joint = NULL;
     state->new_log_joint = NULL;
     state->posterior_r = NULL;
     state->stats = NULL;
     state->new_stats = NULL;
+    state->owned_nu_grid = NULL;
+    state->owned_nu_prior = NULL;
 }
 
 void bocpd_reset(BOCPDState* state) 
