@@ -3,8 +3,14 @@
 
 /* Declare test suite runners */
 int run_gaussian_nig_tests();
+int run_student_t_ng_tests();
 int run_hazard_tests();
 int run_bocpd_core_tests();
+
+/* Test counters */
+int tests_run = 0;
+int tests_passed = 0;
+int tests_failed = 0;
 
 int main() {
     printf("\n");
@@ -12,33 +18,22 @@ int main() {
     printf("  Fast BOCPD C Unit Tests\n");
     printf("========================================\n");
     
-    int failed = 0;
-    
     /* Run all test suites */
-    if (run_gaussian_nig_tests() != 0) {
-        printf(COLOR_RED "\n✗ GaussianNIG tests failed\n" COLOR_RESET);
-        failed = 1;
-    }
+    int failed = 0;
+    failed += run_gaussian_nig_tests();
+    failed += run_student_t_ng_tests();
+    failed += run_hazard_tests();
+    failed += run_bocpd_core_tests();
     
-    if (run_hazard_tests() != 0) {
-        printf(COLOR_RED "\n✗ Hazard tests failed\n" COLOR_RESET);
-        failed = 1;
-    }
-    
-    if (run_bocpd_core_tests() != 0) {
-        printf(COLOR_RED "\n✗ BOCPD Core tests failed\n" COLOR_RESET);
-        failed = 1;
-    }
-    
-    /* Print summary */
+    /* Print result */
     printf("\n========================================\n");
-    if (failed) {
-        printf(COLOR_RED "  ✗ TESTS FAILED\n" COLOR_RESET);
-        printf("========================================\n\n");
-        return 1;
-    } else {
-        printf(COLOR_GREEN "  ✓ ALL TESTS PASSED\n" COLOR_RESET);
-        printf("========================================\n\n");
+    if (failed == 0) {
+        printf(COLOR_GREEN "✓ All tests passed!\n" COLOR_RESET);
+        printf("========================================\n");
         return 0;
+    } else {
+        printf(COLOR_RED "✗ Some tests failed\n" COLOR_RESET);
+        printf("========================================\n");
+        return 1;
     }
 }

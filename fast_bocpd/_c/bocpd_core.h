@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include "gaussian_nig.h"
+#include "student_t_ng.h"
 #include "hazard.h"
 
 /**
@@ -10,6 +11,7 @@
  */
 typedef enum {
     OBS_MODEL_GAUSSIAN_NIG,
+    OBS_MODEL_STUDENT_T_NG,
     // Future: OBS_MODEL_POISSON_GAMMA, OBS_MODEL_BERNOULLI_BETA, etc.
 } ObsModelType;
 
@@ -26,6 +28,7 @@ typedef enum {
  */
 typedef union {
     GaussianNIGParams gaussian_nig;
+    StudentTNGParams student_t_ng;
     // Future models will be added here
 } ObsModelParams;
 
@@ -34,6 +37,7 @@ typedef union {
  */
 typedef union {
     GaussianNIGStats gaussian_nig;
+    StudentTNGStats student_t_ng;
     // Future model stats will be added here
 } ObsModelStats;
 

@@ -7,6 +7,7 @@ ext_module = Extension(
     sources=[
         'fast_bocpd/_c/bocpd_core.c',
         'fast_bocpd/_c/gaussian_nig.c',
+        'fast_bocpd/_c/student_t_ng.c',
         'fast_bocpd/_c/hazard.c',
     ],
     include_dirs=[np.get_include()],

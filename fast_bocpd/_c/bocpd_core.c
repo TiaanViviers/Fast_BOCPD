@@ -58,6 +58,9 @@ int bocpd_init(BOCPDState* state, ObsModelType obs_model_type,
         case OBS_MODEL_GAUSSIAN_NIG:
             state->obs_params.gaussian_nig = *(const GaussianNIGParams*)obs_params;
             break;
+        case OBS_MODEL_STUDENT_T_NG:
+            state->obs_params.student_t_ng = *(const StudentTNGParams*)obs_params;
+            break;
         default:
             return -1;  // Unknown model type
     }
@@ -124,6 +127,9 @@ void bocpd_reset(BOCPDState* state)
         case OBS_MODEL_GAUSSIAN_NIG:
             gaussian_nig_prior_stats(&state->stats[0].gaussian_nig);
             break;
+        case OBS_MODEL_STUDENT_T_NG:
+            student_t_ng_prior_stats(&state->stats[0].student_t_ng);
+            break;
         default:
             // Unknown model - shouldn't happen if bocpd_init succeeded
             break;
@@ -144,6 +150,9 @@ double* bocpd_update(BOCPDState* state, double x, double* cp_prob_out)
     switch (state->obs_model_type) {
         case OBS_MODEL_GAUSSIAN_NIG:
             gaussian_nig_prior_stats(&prior_stats.gaussian_nig);
+            break;
+        case OBS_MODEL_STUDENT_T_NG:
+            student_t_ng_prior_stats(&prior_stats.student_t_ng);
             break;
         default:
             return NULL;  // Unknown model type
@@ -169,6 +178,14 @@ double* bocpd_update(BOCPDState* state, double x, double* cp_prob_out)
                 );
                 log_pred_cp = gaussian_nig_predictive_logpdf(
                     &state->obs_params.gaussian_nig, &prior_stats.gaussian_nig, x
+                );
+                break;
+            case OBS_MODEL_STUDENT_T_NG:
+                log_pred = student_t_ng_predictive_logpdf(
+                    &state->obs_params.student_t_ng, &stats_prev->student_t_ng, x
+                );
+                log_pred_cp = student_t_ng_predictive_logpdf(
+                    &state->obs_params.student_t_ng, &prior_stats.student_t_ng, x
                 );
                 break;
             default:
@@ -201,6 +218,13 @@ double* bocpd_update(BOCPDState* state, double x, double* cp_prob_out)
             switch (state->obs_model_type) {
                 case OBS_MODEL_GAUSSIAN_NIG:
                     gaussian_nig_update_stats(&state->new_stats[r_cont].gaussian_nig, x);
+                    break;
+                case OBS_MODEL_STUDENT_T_NG:
+                    student_t_ng_update_stats(
+                        &state->new_stats[r_cont].student_t_ng,
+                        &state->obs_params.student_t_ng,
+                        x
+                    );
                     break;
                 default:
                     return NULL;  // Unknown model type

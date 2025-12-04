@@ -7,7 +7,7 @@ from typing import Tuple
 
 from . import _bindings
 from .hazard import ConstantHazard
-from .models import GaussianNIG
+from .models import GaussianNIG, StudentTNG
 
 
 class BOCPD:
@@ -42,19 +42,29 @@ class BOCPD:
     
     def _init_c_backend(self) -> None:
         """Initialize C backend."""
-        # Currently only support GaussianNIG + ConstantHazard
-        if not isinstance(self.obs_model, GaussianNIG):
-            raise ValueError(f"Unsupported observation model: {type(self.obs_model)}")
         if not isinstance(self.hazard, ConstantHazard):
             raise ValueError(f"Unsupported hazard function: {type(self.hazard)}")
         
-        # Create C structures
-        obs_params = _bindings.GaussianNIGParams(
-            mu0=self.obs_model.mu0,
-            kappa0=self.obs_model.kappa0,
-            alpha0=self.obs_model.alpha0,
-            beta0=self.obs_model.beta0
-        )
+        # Determine observation model type and create params
+        if isinstance(self.obs_model, GaussianNIG):
+            obs_model_type = _bindings.OBS_MODEL_GAUSSIAN_NIG
+            obs_params = _bindings.GaussianNIGParams(
+                mu0=self.obs_model.mu0,
+                kappa0=self.obs_model.kappa0,
+                alpha0=self.obs_model.alpha0,
+                beta0=self.obs_model.beta0
+            )
+        elif isinstance(self.obs_model, StudentTNG):
+            obs_model_type = _bindings.OBS_MODEL_STUDENT_T_NG
+            obs_params = _bindings.StudentTNGParams(
+                mu0=self.obs_model.mu0,
+                kappa0=self.obs_model.kappa0,
+                alpha0=self.obs_model.alpha0,
+                beta0=self.obs_model.beta0,
+                nu=self.obs_model.nu
+            )
+        else:
+            raise ValueError(f"Unsupported observation model: {type(self.obs_model)}")
         
         hazard_params = _bindings.ConstantHazardParams()
         ret = _bindings._lib.constant_hazard_init(
@@ -68,7 +78,7 @@ class BOCPD:
         self._state = _bindings.BOCPDState()
         ret = _bindings._lib.bocpd_init(
             ctypes.byref(self._state),
-            _bindings.OBS_MODEL_GAUSSIAN_NIG,
+            obs_model_type,
             ctypes.byref(obs_params),
             _bindings.HAZARD_CONSTANT,
             ctypes.byref(hazard_params),

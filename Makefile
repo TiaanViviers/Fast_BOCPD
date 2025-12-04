@@ -15,11 +15,12 @@ OBJ_DIR = $(BUILD_DIR)/obj
 LIB_DIR = $(BUILD_DIR)/lib
 
 # Source files
-IMPL_SRCS = $(SRC_DIR)/gaussian_nig.c $(SRC_DIR)/hazard.c $(SRC_DIR)/bocpd_core.c
-IMPL_OBJS = $(OBJ_DIR)/gaussian_nig.o $(OBJ_DIR)/hazard.o $(OBJ_DIR)/bocpd_core.o
+IMPL_SRCS = $(SRC_DIR)/gaussian_nig.c $(SRC_DIR)/hazard.c $(SRC_DIR)/bocpd_core.c $(SRC_DIR)/student_t_ng.c
+IMPL_OBJS = $(OBJ_DIR)/gaussian_nig.o $(OBJ_DIR)/hazard.o $(OBJ_DIR)/bocpd_core.o $(OBJ_DIR)/student_t_ng.o
 
-TEST_SRCS = $(TEST_DIR)/test_gaussian_nig.c $(TEST_DIR)/test_hazard.c \
-            $(TEST_DIR)/test_bocpd_core.c $(TEST_DIR)/test_runner.c
+TEST_SRCS = $(TEST_DIR)/test_gaussian_nig.c $(TEST_DIR)/test_student_t_ng.c \
+            $(TEST_DIR)/test_hazard.c $(TEST_DIR)/test_bocpd_core.c \
+            $(TEST_DIR)/test_runner.c
 TEST_OBJS = $(patsubst $(TEST_DIR)/%.c,$(OBJ_DIR)/%.o,$(TEST_SRCS))
 
 # Targets
@@ -40,7 +41,7 @@ $(LIB_TARGET): $(IMPL_OBJS) | $(LIB_DIR)
 
 # Build C test runner
 $(TEST_RUNNER): $(IMPL_OBJS) $(TEST_OBJS) | $(BUILD_DIR)
-	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+	$(CC) $(CFLAGS) -o $@ $^ -lm
 	@echo "✓ Test runner built: $(TEST_RUNNER)"
 
 # Compile implementation source files
@@ -58,7 +59,7 @@ $(BUILD_DIR) $(OBJ_DIR) $(LIB_DIR):
 # Run C tests
 test-c: $(TEST_RUNNER)
 	@echo ""
-	@$(TEST_RUNNER)
+	@LD_LIBRARY_PATH=$(LIB_DIR):$$LD_LIBRARY_PATH $(TEST_RUNNER)
 
 # Run Python tests
 test-python:
