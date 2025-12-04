@@ -27,7 +27,7 @@ TEST_OBJS = $(patsubst $(TEST_DIR)/%.c,$(OBJ_DIR)/%.o,$(TEST_SRCS))
 LIB_TARGET = $(LIB_DIR)/libbocpd.so
 TEST_RUNNER = $(BUILD_DIR)/test_runner
 
-.PHONY: all lib test test-c test-python benchmark clean help
+.PHONY: all lib test test-c test-python test-sanitizers test-valgrind benchmark clean help
 
 # Default target
 all: help
@@ -70,6 +70,31 @@ test-python:
 # Run all tests (C + Python)
 test: test-c test-python
 
+# Run tests with AddressSanitizer + UndefinedBehaviorSanitizer
+test-sanitizers:
+	@echo ""
+	@echo "========================================="
+	@echo "Running with ASan + UBSan"
+	@echo "========================================="
+	@$(MAKE) clean > /dev/null 2>&1
+	@CFLAGS="-std=c99 -O1 -g -fsanitize=address,undefined -fno-omit-frame-pointer -Wall -Wextra" $(MAKE) $(TEST_RUNNER) > /dev/null 2>&1
+	@echo ""
+	@$(TEST_RUNNER)
+	@echo ""
+	@echo "✓ Sanitizer tests passed!"
+	@$(MAKE) clean > /dev/null 2>&1
+
+# Run tests with Valgrind
+test-valgrind: $(TEST_RUNNER)
+	@echo ""
+	@echo "========================================="
+	@echo "Running with Valgrind"
+	@echo "========================================="
+	@echo ""
+	@valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 $(TEST_RUNNER)
+	@echo ""
+	@echo "✓ Valgrind tests passed!"
+
 # Run benchmarks
 benchmark: 
 	cd benchmarks && ./benchmark.sh && cd ..
@@ -90,13 +115,15 @@ help:
 	@echo "======================="
 	@echo ""
 	@echo "Targets:"
-	@echo "  make lib          Build shared library (for development)"
-	@echo "  make test         Run all tests (C + Python)"
-	@echo "  make test-c       Run C unit tests only"
-	@echo "  make test-python  Run Python tests only"
-	@echo "  make benchmark    Run benchmarks"
-	@echo "  make clean        Remove all build artifacts"
-	@echo "  make help         Show this help message"
+	@echo "  make lib              Build shared library (for development)"
+	@echo "  make test             Run all tests (C + Python)"
+	@echo "  make test-c           Run C unit tests only"
+	@echo "  make test-python      Run Python tests only"
+	@echo "  make test-sanitizers  Run C tests with ASan/UBSan"
+	@echo "  make test-valgrind    Run C tests with Valgrind"
+	@echo "  make benchmark        Run benchmarks"
+	@echo "  make clean            Remove all build artifacts"
+	@echo "  make help             Show this help message"
 	@echo ""
 	@echo "Development workflow:"
 	@echo "  1. Edit C code in fast_bocpd/_c/"

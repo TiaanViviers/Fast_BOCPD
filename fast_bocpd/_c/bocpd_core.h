@@ -2,9 +2,46 @@
 #define BOCPD_CORE_H
 
 #include <stdint.h>
+#include <stddef.h>
 #include "gaussian_nig.h"
 #include "student_t_ng.h"
 #include "hazard.h"
+
+/**
+ * Observation model virtual table interface.
+ * 
+ * All observation models must implement these functions to integrate with BOCPD.
+ */
+typedef struct {
+    size_t (*stats_size)(const void* params);
+    void (*prior_stats)(void* stats, const void* params);
+    void (*update_stats)(void* stats, const void* params, double x);
+    double (*predictive_logpdf)(const void* stats, const void* params, double x);
+    void (*copy_stats)(void* dst, const void* src, const void* params);
+} ObsModelVTable;
+
+/**
+ * Helper: Round up size to alignment boundary (safe for any alignment >= 1)
+ */
+static inline size_t round_up_align(size_t n, size_t align) {
+    if (align == 0) return n;
+    size_t rem = n % align;
+    return rem ? (n + (align - rem)) : n;
+}
+
+/**
+ * Helper: Get pointer to stats blob for run-length r
+ */
+static inline void* stats_at(uint8_t* base, size_t r, size_t stride) {
+    return (void*)(base + r * stride);
+}
+
+/**
+ * Helper: Get const pointer to stats blob for run-length r
+ */
+static inline const void* cstats_at(const uint8_t* base, size_t r, size_t stride) {
+    return (const void*)(base + r * stride);
+}
 
 /**
  * Observation model types
@@ -63,14 +100,18 @@ typedef struct {
     ObsModelParams obs_params;
     HazardParams hazard_params;
     
-    // State arrays (size: max_run_length + 1)
-    double* log_joint;              // log P(r_t = r, x_1:t)
-    ObsModelStats* stats;           // Sufficient statistics for each run length
+    // Observation model vtable
+    ObsModelVTable obs_vtable;
+    size_t stats_size;  // Size of one stats blob in bytes
+    
+    // State arrays (using byte buffers for variable-size stats)
+    double* log_joint;              // log P(r_t = r, x_1:t) [size: max_run_length + 1]
+    uint8_t* stats;                 // Sufficient statistics [size: (max_run_length + 1) * stats_size]
     
     // Working arrays for update
-    double* new_log_joint;
-    ObsModelStats* new_stats;
-    double* posterior_r;            // Output buffer for posterior distribution
+    double* new_log_joint;          // [size: max_run_length + 1]
+    uint8_t* new_stats;             // [size: (max_run_length + 1) * stats_size]
+    double* posterior_r;            // Output buffer [size: max_run_length + 1]
 } BOCPDState;
 
 /**

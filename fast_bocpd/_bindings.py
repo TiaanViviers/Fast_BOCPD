@@ -121,18 +121,31 @@ class HazardParams(ctypes.Union):
     ]
 
 
+class ObsModelVTable(ctypes.Structure):
+    """Matches ObsModelVTable in C"""
+    _fields_ = [
+        ("stats_size", ctypes.c_void_p),         # function pointer
+        ("prior_stats", ctypes.c_void_p),        # function pointer
+        ("update_stats", ctypes.c_void_p),       # function pointer
+        ("predictive_logpdf", ctypes.c_void_p),  # function pointer
+        ("copy_stats", ctypes.c_void_p),         # function pointer
+    ]
+
+
 class BOCPDState(ctypes.Structure):
-    """Matches BOCPDState in C"""
+    """Matches BOCPDState in C (refactored for variable-size stats)"""
     _fields_ = [
         ("max_run_length", ctypes.c_int32),
         ("obs_model_type", ctypes.c_int),  # enum
         ("hazard_type", ctypes.c_int),     # enum
         ("obs_params", ObsModelParams),
         ("hazard_params", HazardParams),
+        ("obs_vtable", ObsModelVTable),
+        ("stats_size", ctypes.c_size_t),
         ("log_joint", ctypes.POINTER(ctypes.c_double)),
-        ("stats", ctypes.POINTER(ObsModelStats)),
+        ("stats", ctypes.POINTER(ctypes.c_uint8)),  # byte buffer now
         ("new_log_joint", ctypes.POINTER(ctypes.c_double)),
-        ("new_stats", ctypes.POINTER(ObsModelStats)),
+        ("new_stats", ctypes.POINTER(ctypes.c_uint8)),  # byte buffer now
         ("posterior_r", ctypes.POINTER(ctypes.c_double)),
     ]
 

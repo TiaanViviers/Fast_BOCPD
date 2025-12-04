@@ -1,7 +1,119 @@
 #include "bocpd_core.h"
 #include <stdlib.h>
+#include <stddef.h>
 #include <string.h>
 #include <math.h>
+
+/**
+ * Alignment for stats buffers (use max_align_t for maximum portability)
+ * C11 has _Alignof and max_align_t, C99 fallback to sizeof(max_align_t) or 16
+ */
+#if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L
+    #define STATS_ALIGNMENT _Alignof(max_align_t)
+#else
+    #define STATS_ALIGNMENT 16  // Safe fallback: malloc guarantees this on most platforms
+#endif
+
+/**
+ * ============================================================================
+ * Observation Model VTable Implementations
+ * ============================================================================
+ */
+
+/* Gaussian NIG vtable functions */
+static size_t gaussian_nig_stats_size_fn(const void* params) {
+    (void)params;  // unused
+    return sizeof(GaussianNIGStats);
+}
+
+static void gaussian_nig_prior_stats_fn(void* stats, const void* params) {
+    (void)params;  // unused
+    gaussian_nig_prior_stats((GaussianNIGStats*)stats);
+}
+
+static void gaussian_nig_update_stats_fn(void* stats, const void* params, double x) {
+    (void)params;  // unused
+    gaussian_nig_update_stats((GaussianNIGStats*)stats, x);
+}
+
+static double gaussian_nig_predictive_logpdf_fn(const void* stats, const void* params, double x) {
+    return gaussian_nig_predictive_logpdf(
+        (const GaussianNIGParams*)params,
+        (const GaussianNIGStats*)stats,
+        x
+    );
+}
+
+static void gaussian_nig_copy_stats_fn(void* dst, const void* src, const void* params) {
+    (void)params;  // unused
+    memcpy(dst, src, sizeof(GaussianNIGStats));
+}
+
+/* Student-t NG vtable functions */
+static size_t student_t_ng_stats_size_fn(const void* params) {
+    (void)params;  // unused
+    return sizeof(StudentTNGStats);
+}
+
+static void student_t_ng_prior_stats_fn(void* stats, const void* params) {
+    (void)params;  // unused
+    student_t_ng_prior_stats((StudentTNGStats*)stats);
+}
+
+static void student_t_ng_update_stats_fn(void* stats, const void* params, double x) {
+    student_t_ng_update_stats(
+        (StudentTNGStats*)stats,
+        (const StudentTNGParams*)params,
+        x
+    );
+}
+
+static double student_t_ng_predictive_logpdf_fn(const void* stats, const void* params, double x) {
+    return student_t_ng_predictive_logpdf(
+        (const StudentTNGParams*)params,
+        (const StudentTNGStats*)stats,
+        x
+    );
+}
+
+static void student_t_ng_copy_stats_fn(void* dst, const void* src, const void* params) {
+    (void)params;  // unused
+    memcpy(dst, src, sizeof(StudentTNGStats));
+}
+
+/**
+ * Initialize vtable for a given observation model type
+ */
+static void init_obs_vtable(ObsModelVTable* vtable, ObsModelType type) {
+    switch (type) {
+        case OBS_MODEL_GAUSSIAN_NIG:
+            vtable->stats_size = gaussian_nig_stats_size_fn;
+            vtable->prior_stats = gaussian_nig_prior_stats_fn;
+            vtable->update_stats = gaussian_nig_update_stats_fn;
+            vtable->predictive_logpdf = gaussian_nig_predictive_logpdf_fn;
+            vtable->copy_stats = gaussian_nig_copy_stats_fn;
+            break;
+        
+        case OBS_MODEL_STUDENT_T_NG:
+            vtable->stats_size = student_t_ng_stats_size_fn;
+            vtable->prior_stats = student_t_ng_prior_stats_fn;
+            vtable->update_stats = student_t_ng_update_stats_fn;
+            vtable->predictive_logpdf = student_t_ng_predictive_logpdf_fn;
+            vtable->copy_stats = student_t_ng_copy_stats_fn;
+            break;
+        
+        default:
+            // This should never happen if bocpd_init validates properly
+            memset(vtable, 0, sizeof(*vtable));
+            break;
+    }
+}
+
+/**
+ * ============================================================================
+ * Numerically Stable Log-Sum-Exp
+ * ============================================================================
+ */
 
 /**
  * Numerically stable log-sum-exp for a pair of values
@@ -76,14 +188,21 @@ int bocpd_init(BOCPDState* state, ObsModelType obs_model_type,
             return -1;  // Unknown hazard type
     }
     
+    // Initialize observation model vtable
+    init_obs_vtable(&state->obs_vtable, obs_model_type);
+    
+    // Compute stats size and round up for alignment
+    size_t base_stats_size = state->obs_vtable.stats_size(&state->obs_params);
+    state->stats_size = round_up_align(base_stats_size, STATS_ALIGNMENT);
+    
     // Allocate arrays (size: max_run_length + 1)
     int32_t size = max_run_length + 1;
     
     state->log_joint = (double*)malloc(size * sizeof(double));
     state->new_log_joint = (double*)malloc(size * sizeof(double));
     state->posterior_r = (double*)malloc(size * sizeof(double));
-    state->stats = (ObsModelStats*)malloc(size * sizeof(ObsModelStats));
-    state->new_stats = (ObsModelStats*)malloc(size * sizeof(ObsModelStats));
+    state->stats = (uint8_t*)malloc(size * state->stats_size);
+    state->new_stats = (uint8_t*)malloc(size * state->stats_size);
     
     if (!state->log_joint || !state->new_log_joint || !state->posterior_r ||
         !state->stats || !state->new_stats) {
@@ -122,42 +241,50 @@ void bocpd_reset(BOCPDState* state)
     }
     state->log_joint[0] = 0.0;  // log P(r_0=0, no data) = 0
     
-    // Initialize stats[0] to prior based on model type
-    switch (state->obs_model_type) {
-        case OBS_MODEL_GAUSSIAN_NIG:
-            gaussian_nig_prior_stats(&state->stats[0].gaussian_nig);
-            break;
-        case OBS_MODEL_STUDENT_T_NG:
-            student_t_ng_prior_stats(&state->stats[0].student_t_ng);
-            break;
-        default:
-            // Unknown model - shouldn't happen if bocpd_init succeeded
-            break;
+    // Initialize posterior_r to prior belief (all mass at r=0)
+    for (int32_t i = 0; i < size; i++) {
+        state->posterior_r[i] = 0.0;
     }
+    state->posterior_r[0] = 1.0;  // P(r_0=0 before any data) = 1
+    
+#ifdef BOCPD_DEBUG_CHECKS
+    // Debug: Zero stats buffer to prevent reading uninitialized stats after reset
+    memset(state->stats, 0, (size_t)size * state->stats_size);
+#endif
+    
+    // Initialize stats[0] to prior using vtable
+    void* stats_0 = stats_at(state->stats, 0, state->stats_size);
+    state->obs_vtable.prior_stats(stats_0, &state->obs_params);
 }
 
 double* bocpd_update(BOCPDState* state, double x, double* cp_prob_out) 
 {
     int32_t R = state->max_run_length;
+    size_t stats_size = state->stats_size;
+    ObsModelVTable* vtable = &state->obs_vtable;
+    const void* params = &state->obs_params;
     
     // Initialize new arrays
     for (int32_t i = 0; i <= R; i++) {
         state->new_log_joint[i] = -INFINITY;
     }
     
-    // Prior stats for changepoint branch (model-specific)
-    ObsModelStats prior_stats;
-    switch (state->obs_model_type) {
-        case OBS_MODEL_GAUSSIAN_NIG:
-            gaussian_nig_prior_stats(&prior_stats.gaussian_nig);
-            break;
-        case OBS_MODEL_STUDENT_T_NG:
-            student_t_ng_prior_stats(&prior_stats.student_t_ng);
-            break;
-        default:
-            return NULL;  // Unknown model type
-    }
-    state->new_stats[0] = prior_stats;
+#ifdef BOCPD_DEBUG_CHECKS
+    // Debug: Zero new_stats buffer to catch any bugs where we read uninitialized stats
+    // In release builds, this is unnecessary since we only read stats[r] if log_joint[r] != -inf,
+    // and we guarantee to write stats[r] before setting log_joint[r] to non-inf.
+    memset(state->new_stats, 0, (size_t)(R + 1) * stats_size);
+#endif
+    
+    // Prior stats for changepoint branch (r=0)
+    void* new_stats_0 = stats_at(state->new_stats, 0, stats_size);
+    vtable->prior_stats(new_stats_0, params);
+    
+    // CRITICAL: Compute CP predictive using PRIOR-to-x stats
+    double log_pred_cp = vtable->predictive_logpdf(new_stats_0, params, x);
+    
+    // CRITICAL: Update r=0 stats to incorporate x (for next time step)
+    vtable->update_stats(new_stats_0, params, x);
     
     // Loop over all previous run lengths
     for (int32_t r_prev = 0; r_prev <= R; r_prev++) {
@@ -167,30 +294,11 @@ double* bocpd_update(BOCPDState* state, double x, double* cp_prob_out)
             continue;
         }
         
-        ObsModelStats* stats_prev = &state->stats[r_prev];
+        // Get stats for this run length (pre-x stats, OLD buffer)
+        const void* stats_prev = cstats_at(state->stats, r_prev, stats_size);
         
-        // Predictive log likelihood (model-specific)
-        double log_pred, log_pred_cp;
-        switch (state->obs_model_type) {
-            case OBS_MODEL_GAUSSIAN_NIG:
-                log_pred = gaussian_nig_predictive_logpdf(
-                    &state->obs_params.gaussian_nig, &stats_prev->gaussian_nig, x
-                );
-                log_pred_cp = gaussian_nig_predictive_logpdf(
-                    &state->obs_params.gaussian_nig, &prior_stats.gaussian_nig, x
-                );
-                break;
-            case OBS_MODEL_STUDENT_T_NG:
-                log_pred = student_t_ng_predictive_logpdf(
-                    &state->obs_params.student_t_ng, &stats_prev->student_t_ng, x
-                );
-                log_pred_cp = student_t_ng_predictive_logpdf(
-                    &state->obs_params.student_t_ng, &prior_stats.student_t_ng, x
-                );
-                break;
-            default:
-                return NULL;  // Unknown model type
-        }
+        // Predictive log likelihood using PRE-X stats (critical: use OLD stats)
+        double log_pred = vtable->predictive_logpdf(stats_prev, params, x);
         
         // Hazard transitions (hazard-specific)
         double log_trans_cp, log_trans_cont;
@@ -213,22 +321,10 @@ double* bocpd_update(BOCPDState* state, double x, double* cp_prob_out)
             double logp_cont = lj_prev + log_pred + log_trans_cont;
             state->new_log_joint[r_cont] = logsumexp_pair(state->new_log_joint[r_cont], logp_cont);
             
-            // Update stats for continuation (model-specific)
-            state->new_stats[r_cont] = *stats_prev;
-            switch (state->obs_model_type) {
-                case OBS_MODEL_GAUSSIAN_NIG:
-                    gaussian_nig_update_stats(&state->new_stats[r_cont].gaussian_nig, x);
-                    break;
-                case OBS_MODEL_STUDENT_T_NG:
-                    student_t_ng_update_stats(
-                        &state->new_stats[r_cont].student_t_ng,
-                        &state->obs_params.student_t_ng,
-                        x
-                    );
-                    break;
-                default:
-                    return NULL;  // Unknown model type
-            }
+            // Copy stats from r_prev to r_cont (NEW buffer), then update with x
+            void* new_stats_cont = stats_at(state->new_stats, r_cont, stats_size);
+            vtable->copy_stats(new_stats_cont, stats_prev, params);
+            vtable->update_stats(new_stats_cont, params, x);
         }
     }
     
@@ -246,12 +342,12 @@ double* bocpd_update(BOCPDState* state, double x, double* cp_prob_out)
         }
     }
     
-    // Update internal state
+    // Swap buffers (old <-> new)
     double* tmp_log = state->log_joint;
     state->log_joint = state->new_log_joint;
     state->new_log_joint = tmp_log;
     
-    ObsModelStats* tmp_stats = state->stats;
+    uint8_t* tmp_stats = state->stats;
     state->stats = state->new_stats;
     state->new_stats = tmp_stats;
     
