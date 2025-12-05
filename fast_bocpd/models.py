@@ -137,3 +137,136 @@ class StudentTNG:
                 self.nu_prior = self.nu_prior / np.sum(self.nu_prior)
 
 
+class PoissonGamma:
+    """
+    Poisson likelihood with Gamma prior on rate parameter (count data).
+    
+    Conjugate Bayesian model for non-negative integer count data.
+    Predictive distribution is Negative Binomial.
+    
+    Use this for:
+        - Event counts (clicks, transactions, arrivals)
+        - Discrete data with λ > 0
+        - Overdispersed counts (vs. fixed-rate Poisson)
+    
+    Prior hyperparameters:
+        alpha0: Gamma prior shape (must be > 0)
+                Controls prior belief about rate variability
+                Larger values = more concentrated prior
+        beta0:  Gamma prior rate (must be > 0)
+                Controls prior belief about expected rate
+                Prior mean rate = alpha0 / beta0
+    
+    Data requirements:
+        - Must be non-negative integers (0, 1, 2, ...)
+        - In Python, pass as int, float with .0, or integer array
+        - Non-integer or negative values will be rejected (strict=True)
+    
+    Examples:
+        # Event counts with vague prior
+        >>> model = PoissonGamma(alpha0=1.0, beta0=1.0)
+        
+        # Prior belief: mean rate ≈ 5.0, concentrated
+        >>> model = PoissonGamma(alpha0=50.0, beta0=10.0)  # mean = 50/10 = 5
+        
+        # Disable strict validation (use with caution)
+        >>> model = PoissonGamma(alpha0=1.0, beta0=1.0, strict=False)
+    """
+    
+    def __init__(
+        self, 
+        alpha0: float, 
+        beta0: float,
+        *,
+        strict: bool = True
+    ):
+        # Validate hyperparameters (always, even if strict=False)
+        if not isinstance(alpha0, (int, float, np.number)):
+            raise TypeError(f"alpha0 must be numeric, got {type(alpha0)}")
+        if not isinstance(beta0, (int, float, np.number)):
+            raise TypeError(f"beta0 must be numeric, got {type(beta0)}")
+        
+        alpha0 = float(alpha0)
+        beta0 = float(beta0)
+        
+        if not np.isfinite(alpha0):
+            raise ValueError("alpha0 must be finite")
+        if not np.isfinite(beta0):
+            raise ValueError("beta0 must be finite")
+        if alpha0 <= 0:
+            raise ValueError("alpha0 must be > 0")
+        if beta0 <= 0:
+            raise ValueError("beta0 must be > 0")
+        
+        self.alpha0 = alpha0
+        self.beta0 = beta0
+        self.strict = bool(strict)
+    
+    def validate_data(self, x):
+        """
+        Validate a single observation (used in update()).
+        
+        Args:
+            x: Observation (should be non-negative integer)
+        
+        Raises:
+            ValueError: If x is invalid and strict=True
+        """
+        if not self.strict:
+            return  # Skip validation
+        
+        # Check finite
+        if not np.isfinite(x):
+            raise ValueError(f"Observation must be finite, got {x}")
+        
+        # Check non-negative
+        if x < 0:
+            raise ValueError(f"Poisson counts must be >= 0, got {x}")
+        
+        # Check integer-ness (tolerance for floating point)
+        if abs(x - round(x)) > 1e-9:
+            raise ValueError(
+                f"Poisson counts must be integers, got {x}. "
+                f"If your data is truly continuous, use GaussianNIG or StudentTNG instead."
+            )
+    
+    def validate_batch(self, data: np.ndarray) -> np.ndarray:
+        """
+        Validate and convert batch data to contiguous float64 array.
+        
+        Args:
+            data: Array-like of observations
+        
+        Returns:
+            Validated, contiguous float64 array
+        
+        Raises:
+            ValueError: If data is invalid and strict=True
+        """
+        # Convert to numpy array if not already
+        data = np.asarray(data)
+        
+        # Fast-path for integer dtypes (common case)
+        if np.issubdtype(data.dtype, np.integer):
+            if self.strict and np.any(data < 0):
+                raise ValueError("Poisson counts must be >= 0")
+            return np.ascontiguousarray(data, dtype=np.float64)
+        
+        # Float array validation (if strict)
+        if self.strict:
+            if not np.all(np.isfinite(data)):
+                raise ValueError("All observations must be finite")
+            if np.any(data < 0):
+                raise ValueError("Poisson counts must be >= 0")
+            
+            # Check integer-ness
+            if not np.allclose(data, np.round(data), atol=1e-9):
+                raise ValueError(
+                    "Poisson counts must be integers. "
+                    "If your data is truly continuous, use GaussianNIG or StudentTNG instead."
+                )
+        
+        return np.ascontiguousarray(data, dtype=np.float64)
+
+
+

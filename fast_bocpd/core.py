@@ -7,7 +7,7 @@ from typing import Tuple
 
 from . import _bindings
 from .hazard import ConstantHazard
-from .models import GaussianNIG, StudentTNG
+from .models import GaussianNIG, StudentTNG, PoissonGamma
 
 
 class BOCPD:
@@ -82,6 +82,12 @@ class BOCPD:
                     beta0=self.obs_model.beta0,
                     nu=self.obs_model.nu
                 )
+        elif isinstance(self.obs_model, PoissonGamma):
+            obs_model_type = _bindings.OBS_MODEL_POISSON_GAMMA
+            obs_params = _bindings.PoissonGammaParams(
+                alpha0=self.obs_model.alpha0,
+                beta0=self.obs_model.beta0
+            )
         else:
             raise ValueError(f"Unsupported observation model: {type(self.obs_model)}")
         
@@ -133,6 +139,10 @@ class BOCPD:
             posterior_r: Array of P(r_t = r | x_1:t)
             cp_prob: Probability of changepoint (posterior_r[0])
         """
+        # Validate data for Poisson model (if applicable)
+        if isinstance(self.obs_model, PoissonGamma):
+            self.obs_model.validate_data(x)
+        
         cp_prob = ctypes.c_double()
         posterior_ptr = _bindings._lib.bocpd_update(
             ctypes.byref(self._state),
@@ -161,7 +171,12 @@ class BOCPD:
         Returns:
             cp_probs: Array of changepoint probabilities for each time step
         """
-        data = np.ascontiguousarray(data, dtype=np.float64)
+        # Validate and convert data for Poisson model (if applicable)
+        if isinstance(self.obs_model, PoissonGamma):
+            data = self.obs_model.validate_batch(data)
+        else:
+            data = np.ascontiguousarray(data, dtype=np.float64)
+        
         cp_probs = np.zeros(len(data), dtype=np.float64)
         
         ret = _bindings._lib.bocpd_batch_update(

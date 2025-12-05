@@ -108,6 +108,38 @@ static void student_t_ng_grid_copy_stats_fn(void* dst, const void* src, const vo
     student_t_ng_grid_copy_stats(dst, src, (const StudentTNGGridParams*)params);
 }
 
+/* Poisson-Gamma vtable functions */
+static size_t poisson_gamma_stats_size_fn(const void* params) {
+    (void)params;  // unused
+    return sizeof(PoissonGammaStats);
+}
+
+static void poisson_gamma_prior_stats_fn(void* stats, const void* params) {
+    (void)params;  // unused
+    poisson_gamma_prior_stats((PoissonGammaStats*)stats);
+}
+
+static void poisson_gamma_update_stats_fn(void* stats, const void* params, double x) {
+    poisson_gamma_update_stats(
+        (PoissonGammaStats*)stats,
+        (const PoissonGammaParams*)params,
+        x
+    );
+}
+
+static double poisson_gamma_predictive_logpdf_fn(const void* stats, const void* params, double x) {
+    return poisson_gamma_predictive_logpdf(
+        (const PoissonGammaParams*)params,
+        (const PoissonGammaStats*)stats,
+        x
+    );
+}
+
+static void poisson_gamma_copy_stats_fn(void* dst, const void* src, const void* params) {
+    (void)params;  // unused
+    poisson_gamma_copy_stats(dst, src);
+}
+
 /**
  * Initialize vtable for a given observation model type
  */
@@ -135,6 +167,14 @@ static void init_obs_vtable(ObsModelVTable* vtable, ObsModelType type) {
             vtable->update_stats = student_t_ng_grid_update_stats_fn;
             vtable->predictive_logpdf = student_t_ng_grid_predictive_logpdf_fn;
             vtable->copy_stats = student_t_ng_grid_copy_stats_fn;
+            break;
+        
+        case OBS_MODEL_POISSON_GAMMA:
+            vtable->stats_size = poisson_gamma_stats_size_fn;
+            vtable->prior_stats = poisson_gamma_prior_stats_fn;
+            vtable->update_stats = poisson_gamma_update_stats_fn;
+            vtable->predictive_logpdf = poisson_gamma_predictive_logpdf_fn;
+            vtable->copy_stats = poisson_gamma_copy_stats_fn;
             break;
         
         default:
@@ -192,6 +232,13 @@ int bocpd_init(BOCPDState* state, ObsModelType obs_model_type,
     const void* obs_params, HazardType hazard_type, const void* hazard_params,
     int32_t max_run_length) 
 {
+    int rc = -1;  // Assume failure
+    
+    // Guard against NULL pointers
+    if (!state || !obs_params || !hazard_params) {
+        return -1;
+    }
+    
     // Guard against overflow in (max_run_length + 1)
     if (max_run_length <= 0 || max_run_length >= INT32_MAX) {
         return -1;
@@ -219,7 +266,7 @@ int bocpd_init(BOCPDState* state, ObsModelType obs_model_type,
             
             // Validate grid parameters
             if (student_t_ng_grid_validate_params(grid_params) != 0) {
-                return -1;
+                goto fail;
             }
             
             int32_t K = grid_params->K;
@@ -227,24 +274,18 @@ int bocpd_init(BOCPDState* state, ObsModelType obs_model_type,
             // Deep copy nu_grid (borrowed from Python)
             state->owned_nu_grid = (double*)malloc(K * sizeof(double));
             if (!state->owned_nu_grid) {
-                return -1;
+                goto fail;
             }
             memcpy(state->owned_nu_grid, grid_params->nu_grid, K * sizeof(double));
             
             // Normalize and deep copy nu_prior
             state->owned_nu_prior = (double*)malloc(K * sizeof(double));
             if (!state->owned_nu_prior) {
-                free(state->owned_nu_grid);
-                state->owned_nu_grid = NULL;
-                return -1;
+                goto fail;
             }
             
             if (student_t_ng_grid_normalize_prior(grid_params->nu_prior, K, state->owned_nu_prior) != 0) {
-                free(state->owned_nu_grid);
-                free(state->owned_nu_prior);
-                state->owned_nu_grid = NULL;
-                state->owned_nu_prior = NULL;
-                return -1;
+                goto fail;
             }
             
             // Copy params struct with owned pointers
@@ -258,8 +299,21 @@ int bocpd_init(BOCPDState* state, ObsModelType obs_model_type,
             break;
         }
             
+        case OBS_MODEL_POISSON_GAMMA: {
+            const PoissonGammaParams* pg_params = (const PoissonGammaParams*)obs_params;
+            
+            // Validate parameters
+            if (!isfinite(pg_params->alpha0) || !isfinite(pg_params->beta0) ||
+                !(pg_params->alpha0 > 0.0) || !(pg_params->beta0 > 0.0)) {
+                goto fail;
+            }
+            
+            state->obs_params.poisson_gamma = *pg_params;
+            break;
+        }
+            
         default:
-            return -1;  // Unknown model type
+            goto fail;  // Unknown model type
     }
     
     // Initialize hazard based on type
@@ -270,8 +324,7 @@ int bocpd_init(BOCPDState* state, ObsModelType obs_model_type,
             break;
         }
         default:
-            bocpd_free(state);  // Clean up any allocated owned pointers
-            return -1;  // Unknown hazard type
+            goto fail;  // Unknown hazard type
     }
     
     // Initialize observation model vtable
@@ -287,12 +340,10 @@ int bocpd_init(BOCPDState* state, ObsModelType obs_model_type,
     
     // Check for size_t overflow in allocations
     if (state->stats_size != 0 && n_blobs > (SIZE_MAX / state->stats_size)) {
-        bocpd_free(state);
-        return -1;  // Overflow in stats buffer size
+        goto fail;  // Overflow in stats buffer size
     }
     if (n_blobs > (SIZE_MAX / sizeof(double))) {
-        bocpd_free(state);
-        return -1;  // Overflow in double buffer size
+        goto fail;  // Overflow in double buffer size
     }
     
     state->log_joint = (double*)malloc(n_blobs * sizeof(double));
@@ -303,18 +354,25 @@ int bocpd_init(BOCPDState* state, ObsModelType obs_model_type,
     
     if (!state->log_joint || !state->new_log_joint || !state->posterior_r ||
         !state->stats || !state->new_stats) {
-        bocpd_free(state);
-        return -1;
+        goto fail;
     }
     
     // Initialize to prior
     bocpd_reset(state);
     
-    return 0;
+    rc = 0;  // Success
+    
+fail:
+    if (rc != 0) {
+        bocpd_free(state);
+    }
+    return rc;
 }
 
 void bocpd_free(BOCPDState* state) 
 {
+    if (!state) return;
+    
     if (state->log_joint) free(state->log_joint);
     if (state->new_log_joint) free(state->new_log_joint);
     if (state->posterior_r) free(state->posterior_r);
@@ -336,6 +394,8 @@ void bocpd_free(BOCPDState* state)
 
 void bocpd_reset(BOCPDState* state) 
 {
+    if (!state) return;
+    
     int32_t size = state->max_run_length + 1;
     
     // Initialize log_joint to -inf
@@ -362,6 +422,8 @@ void bocpd_reset(BOCPDState* state)
 
 double* bocpd_update(BOCPDState* state, double x, double* cp_prob_out) 
 {
+    if (!state) return NULL;
+    
     int32_t R = state->max_run_length;
     size_t stats_size = state->stats_size;
     ObsModelVTable* vtable = &state->obs_vtable;
@@ -419,6 +481,10 @@ double* bocpd_update(BOCPDState* state, double x, double* cp_prob_out)
         state->new_log_joint[0] = logsumexp_pair(state->new_log_joint[0], logp_cp);
         
         // Continuation branch: r_t = r_prev + 1
+        // IMPORTANT: Each r_cont has exactly ONE parent (r_prev = r_cont - 1).
+        // This 1-to-1 mapping means we can safely copy and update stats.
+        // If future modifications introduce pruning/binning where multiple
+        // r_prev map to the same r_cont, stats combination logic will be needed.
         int32_t r_cont = r_prev + 1;
         if (r_cont <= R) {
             double logp_cont = lj_prev + log_pred + log_trans_cont;

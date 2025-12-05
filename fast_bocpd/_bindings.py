@@ -102,6 +102,22 @@ class StudentTNGGridParams(ctypes.Structure):
     ]
 
 
+class PoissonGammaParams(ctypes.Structure):
+    """Matches PoissonGammaParams in C"""
+    _fields_ = [
+        ("alpha0", ctypes.c_double),
+        ("beta0", ctypes.c_double),
+    ]
+
+
+class PoissonGammaStats(ctypes.Structure):
+    """Matches PoissonGammaStats in C"""
+    _fields_ = [
+        ("n", ctypes.c_int64),
+        ("sum_x", ctypes.c_double),
+    ]
+
+
 class ConstantHazardParams(ctypes.Structure):
     """Matches ConstantHazardParams in C"""
     _fields_ = [
@@ -117,6 +133,7 @@ class ObsModelParams(ctypes.Union):
         ("gaussian_nig", GaussianNIGParams),
         ("student_t_ng", StudentTNGParams),
         ("student_t_ng_grid", StudentTNGGridParams),
+        ("poisson_gamma", PoissonGammaParams),
     ]
 
 
@@ -162,6 +179,7 @@ class BOCPDState(ctypes.Structure):
 OBS_MODEL_GAUSSIAN_NIG = 0
 OBS_MODEL_STUDENT_T_NG = 1
 OBS_MODEL_STUDENT_T_NG_GRID = 2
+OBS_MODEL_POISSON_GAMMA = 3
 HAZARD_CONSTANT = 0
 
 

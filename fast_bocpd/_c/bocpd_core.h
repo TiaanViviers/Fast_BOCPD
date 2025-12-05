@@ -6,6 +6,7 @@
 #include "gaussian_nig.h"
 #include "student_t_ng.h"
 #include "student_t_ng_grid.h"
+#include "poisson_gamma.h"
 #include "hazard.h"
 
 /**
@@ -50,7 +51,8 @@ static inline const void* cstats_at(const uint8_t* base, size_t r, size_t stride
 typedef enum {
     OBS_MODEL_GAUSSIAN_NIG = 0,
     OBS_MODEL_STUDENT_T_NG = 1,
-    OBS_MODEL_STUDENT_T_NG_GRID = 2
+    OBS_MODEL_STUDENT_T_NG_GRID = 2,
+    OBS_MODEL_POISSON_GAMMA = 3
 } ObsModelType;
 
 /**
@@ -68,6 +70,7 @@ typedef union {
     GaussianNIGParams gaussian_nig;
     StudentTNGParams student_t_ng;
     StudentTNGGridParams student_t_ng_grid;
+    PoissonGammaParams poisson_gamma;
 } ObsModelParams;
 
 /**
