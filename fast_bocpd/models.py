@@ -269,4 +269,155 @@ class PoissonGamma:
         return np.ascontiguousarray(data, dtype=np.float64)
 
 
+class BernoulliBeta:
+    """
+    Bernoulli likelihood with Beta prior on success probability (binary data).
+    
+    Conjugate Bayesian model for binary outcomes (0/1, success/failure).
+    Predictive distribution is Beta-Bernoulli.
+    
+    Use this for:
+        - Binary classification (yes/no, pass/fail)
+        - Conversion rates (click/no-click)
+        - A/B testing outcomes
+        - Any {0, 1} data
+    
+    Prior hyperparameters:
+        alpha0: Beta prior successes (must be > 0)
+                Controls prior belief about success probability
+                Larger values = more weight on high success rates
+        beta0:  Beta prior failures (must be > 0)
+                Controls prior belief about failure probability
+                Larger values = more weight on low success rates
+                Prior mean = alpha0 / (alpha0 + beta0)
+    
+    Data requirements:
+        - Must be binary: 0 or 1
+        - In Python, pass as int, bool, or float with .0
+        - Non-binary values will be rejected (strict=True)
+    
+    Examples:
+        # Vague prior (uniform over [0,1])
+        >>> model = BernoulliBeta(alpha0=1.0, beta0=1.0)
+        
+        # Prior belief: success rate ≈ 0.3, concentrated
+        >>> model = BernoulliBeta(alpha0=30.0, beta0=70.0)  # mean = 30/100 = 0.3
+        
+        # Disable strict validation (use with caution)
+        >>> model = BernoulliBeta(alpha0=1.0, beta0=1.0, strict=False)
+    """
+    
+    def __init__(
+        self,
+        alpha0: float,
+        beta0: float,
+        *,
+        strict: bool = True
+    ):
+        # Validate hyperparameters (always, even if strict=False)
+        if not isinstance(alpha0, (int, float, np.number)):
+            raise TypeError(f"alpha0 must be numeric, got {type(alpha0)}")
+        if not isinstance(beta0, (int, float, np.number)):
+            raise TypeError(f"beta0 must be numeric, got {type(beta0)}")
+        
+        alpha0 = float(alpha0)
+        beta0 = float(beta0)
+        
+        if not np.isfinite(alpha0):
+            raise ValueError("alpha0 must be finite")
+        if not np.isfinite(beta0):
+            raise ValueError("beta0 must be finite")
+        if alpha0 <= 0:
+            raise ValueError("alpha0 must be > 0")
+        if beta0 <= 0:
+            raise ValueError("beta0 must be > 0")
+        
+        self.alpha0 = alpha0
+        self.beta0 = beta0
+        self.strict = bool(strict)
+    
+    def validate_data(self, x):
+        """
+        Validate a single observation (used in update()).
+        
+        Args:
+            x: Observation (should be 0 or 1)
+        
+        Raises:
+            ValueError: If x is invalid and strict=True
+        """
+        if not self.strict:
+            return  # Skip validation
+        
+        # Check finite
+        if not np.isfinite(x):
+            raise ValueError(f"Observation must be finite, got {x}")
+        
+        # Check binary-ness (tolerance for floating point)
+        x_rounded = round(x)
+        if abs(x - x_rounded) > 1e-9:
+            raise ValueError(
+                f"Bernoulli data must be binary (0 or 1), got {x}. "
+                f"If your data is continuous, use GaussianNIG or StudentTNG instead."
+            )
+        
+        # Check range
+        if x_rounded not in (0, 1):
+            raise ValueError(
+                f"Bernoulli data must be 0 or 1, got {x}. "
+                f"If your data is continuous, use GaussianNIG or StudentTNG instead."
+            )
+    
+    def validate_batch(self, data: np.ndarray) -> np.ndarray:
+        """
+        Validate and convert batch data to contiguous float64 array.
+        
+        Args:
+            data: Array-like of observations
+        
+        Returns:
+            Validated, contiguous float64 array
+        
+        Raises:
+            ValueError: If data is invalid and strict=True
+        """
+        # Convert to numpy array if not already
+        data = np.asarray(data)
+        
+        # Fast-path for boolean dtype
+        if data.dtype == np.bool_:
+            return np.ascontiguousarray(data, dtype=np.float64)
+        
+        # Fast-path for integer dtypes (common case)
+        if np.issubdtype(data.dtype, np.integer):
+            if self.strict:
+                unique_vals = np.unique(data)
+                if not np.all((unique_vals == 0) | (unique_vals == 1)):
+                    raise ValueError("Bernoulli data must be binary (0 or 1)")
+            return np.ascontiguousarray(data, dtype=np.float64)
+        
+        # Float array validation (if strict)
+        if self.strict:
+            if not np.all(np.isfinite(data)):
+                raise ValueError("All observations must be finite")
+            
+            # Check binary-ness
+            if not np.allclose(data, np.round(data), atol=1e-9):
+                raise ValueError(
+                    "Bernoulli data must be binary (0 or 1). "
+                    "If your data is continuous, use GaussianNIG or StudentTNG instead."
+                )
+            
+            # Check range
+            rounded = np.round(data)
+            if not np.all((rounded == 0) | (rounded == 1)):
+                raise ValueError(
+                    "Bernoulli data must be 0 or 1. "
+                    "If your data is continuous, use GaussianNIG or StudentTNG instead."
+                )
+        
+        return np.ascontiguousarray(data, dtype=np.float64)
+
+
+
 

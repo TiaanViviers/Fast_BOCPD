@@ -7,6 +7,7 @@
 #include "student_t_ng.h"
 #include "student_t_ng_grid.h"
 #include "poisson_gamma.h"
+#include "bernoulli_beta.h"
 #include "hazard.h"
 
 /**
@@ -32,7 +33,8 @@ static inline size_t round_up_align(size_t n, size_t align) {
 }
 
 /**
- * Helper: Get pointer to stats blob for run-length r
+ * Helper: Get mutable pointer to stats blob for run-length r
+ * Use when writing/modifying stats (e.g., update_stats, prior_stats)
  */
 static inline void* stats_at(uint8_t* base, size_t r, size_t stride) {
     return (void*)(base + r * stride);
@@ -40,6 +42,8 @@ static inline void* stats_at(uint8_t* base, size_t r, size_t stride) {
 
 /**
  * Helper: Get const pointer to stats blob for run-length r
+ * Use when reading stats without modification (e.g., predictive_logpdf)
+ * Maintains const-correctness and prevents accidental modification
  */
 static inline const void* cstats_at(const uint8_t* base, size_t r, size_t stride) {
     return (const void*)(base + r * stride);
@@ -52,7 +56,8 @@ typedef enum {
     OBS_MODEL_GAUSSIAN_NIG = 0,
     OBS_MODEL_STUDENT_T_NG = 1,
     OBS_MODEL_STUDENT_T_NG_GRID = 2,
-    OBS_MODEL_POISSON_GAMMA = 3
+    OBS_MODEL_POISSON_GAMMA = 3,
+    OBS_MODEL_BERNOULLI_BETA = 4
 } ObsModelType;
 
 /**
@@ -60,7 +65,6 @@ typedef enum {
  */
 typedef enum {
     HAZARD_CONSTANT,
-    // Future: HAZARD_GEOMETRIC, etc.
 } HazardType;
 
 /**
@@ -71,6 +75,7 @@ typedef union {
     StudentTNGParams student_t_ng;
     StudentTNGGridParams student_t_ng_grid;
     PoissonGammaParams poisson_gamma;
+    BernoulliBetaParams bernoulli_beta;
 } ObsModelParams;
 
 /**
@@ -78,7 +83,6 @@ typedef union {
  */
 typedef union {
     ConstantHazardParams constant;
-    // Future hazard types will be added here
 } HazardParams;
 
 /**
@@ -99,6 +103,9 @@ typedef struct {
     ObsModelVTable obs_vtable;
     size_t stats_size;  // Size of one stats blob in bytes
     
+    // Pointer to active params member (for proper aliasing)
+    const void* obs_params_ptr;
+    
     // State arrays (using byte buffers for variable-size stats)
     double* log_joint;              // log P(r_t = r, x_1:t) [size: max_run_length + 1]
     uint8_t* stats;                 // Sufficient statistics [size: (max_run_length + 1) * stats_size]
@@ -109,8 +116,8 @@ typedef struct {
     double* posterior_r;            // Output buffer [size: max_run_length + 1]
     
     // Grid Student-t ownership (NULL for non-grid models)
-    double* owned_nu_grid;          // Deep copy of nu_grid (for grid model only)
-    double* owned_nu_prior;         // Normalized copy of nu_prior (for grid model only)
+    double* owned_nu_grid;          // Deep copy of nu_grid
+    double* owned_nu_prior;         // Normalized copy of nu_prior
 } BOCPDState;
 
 /**

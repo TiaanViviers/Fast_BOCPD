@@ -118,6 +118,22 @@ class PoissonGammaStats(ctypes.Structure):
     ]
 
 
+class BernoulliBetaParams(ctypes.Structure):
+    """Matches BernoulliBetaParams in C"""
+    _fields_ = [
+        ("alpha0", ctypes.c_double),
+        ("beta0", ctypes.c_double),
+    ]
+
+
+class BernoulliBetaStats(ctypes.Structure):
+    """Matches BernoulliBetaStats in C"""
+    _fields_ = [
+        ("n", ctypes.c_int32),
+        ("sum_x", ctypes.c_double),
+    ]
+
+
 class ConstantHazardParams(ctypes.Structure):
     """Matches ConstantHazardParams in C"""
     _fields_ = [
@@ -134,6 +150,7 @@ class ObsModelParams(ctypes.Union):
         ("student_t_ng", StudentTNGParams),
         ("student_t_ng_grid", StudentTNGGridParams),
         ("poisson_gamma", PoissonGammaParams),
+        ("bernoulli_beta", BernoulliBetaParams),
     ]
 
 
@@ -165,6 +182,7 @@ class BOCPDState(ctypes.Structure):
         ("hazard_params", HazardParams),
         ("obs_vtable", ObsModelVTable),
         ("stats_size", ctypes.c_size_t),
+        ("obs_params_ptr", ctypes.c_void_p),  # Pointer to active params member
         ("log_joint", ctypes.POINTER(ctypes.c_double)),
         ("stats", ctypes.POINTER(ctypes.c_uint8)),  # byte buffer now
         ("new_log_joint", ctypes.POINTER(ctypes.c_double)),
@@ -180,6 +198,7 @@ OBS_MODEL_GAUSSIAN_NIG = 0
 OBS_MODEL_STUDENT_T_NG = 1
 OBS_MODEL_STUDENT_T_NG_GRID = 2
 OBS_MODEL_POISSON_GAMMA = 3
+OBS_MODEL_BERNOULLI_BETA = 4
 HAZARD_CONSTANT = 0
 
 

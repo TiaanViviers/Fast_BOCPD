@@ -6,6 +6,7 @@ int run_gaussian_nig_tests();
 int run_student_t_ng_tests();
 int run_student_t_ng_grid_tests();
 int run_poisson_gamma_tests();
+int run_bernoulli_beta_tests();
 int run_hazard_tests();
 int run_bocpd_core_tests();
 
@@ -26,6 +27,7 @@ int main() {
     failed += run_student_t_ng_tests();
     failed += run_student_t_ng_grid_tests();
     failed += run_poisson_gamma_tests();
+    failed += run_bernoulli_beta_tests();
     failed += run_hazard_tests();
     failed += run_bocpd_core_tests();
     

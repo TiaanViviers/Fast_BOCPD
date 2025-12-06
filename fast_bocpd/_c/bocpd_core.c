@@ -11,7 +11,7 @@
 
 /**
  * Alignment for stats buffers (use max_align_t for maximum portability)
- * C11 has _Alignof and max_align_t, C99 fallback to 16 (practical assumption)
+ * C11 has _Alignof and max_align_t, C99 fallback to 16
  */
 #if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L
     #define STATS_ALIGNMENT _Alignof(max_align_t)
@@ -140,6 +140,38 @@ static void poisson_gamma_copy_stats_fn(void* dst, const void* src, const void* 
     poisson_gamma_copy_stats(dst, src);
 }
 
+/* Bernoulli-Beta vtable functions */
+static size_t bernoulli_beta_stats_size_fn(const void* params) {
+    (void)params;  // unused
+    return sizeof(BernoulliBetaStats);
+}
+
+static void bernoulli_beta_prior_stats_fn(void* stats, const void* params) {
+    (void)params;  // unused
+    bernoulli_beta_prior_stats((BernoulliBetaStats*)stats);
+}
+
+static void bernoulli_beta_update_stats_fn(void* stats, const void* params, double x) {
+    bernoulli_beta_update_stats(
+        (BernoulliBetaStats*)stats,
+        (const BernoulliBetaParams*)params,
+        x
+    );
+}
+
+static double bernoulli_beta_predictive_logpdf_fn(const void* stats, const void* params, double x) {
+    return bernoulli_beta_predictive_logpdf(
+        (const BernoulliBetaParams*)params,
+        (const BernoulliBetaStats*)stats,
+        x
+    );
+}
+
+static void bernoulli_beta_copy_stats_fn(void* dst, const void* src, const void* params) {
+    (void)params;  // unused
+    bernoulli_beta_copy_stats(dst, src);
+}
+
 /**
  * Initialize vtable for a given observation model type
  */
@@ -175,6 +207,14 @@ static void init_obs_vtable(ObsModelVTable* vtable, ObsModelType type) {
             vtable->update_stats = poisson_gamma_update_stats_fn;
             vtable->predictive_logpdf = poisson_gamma_predictive_logpdf_fn;
             vtable->copy_stats = poisson_gamma_copy_stats_fn;
+            break;
+        
+        case OBS_MODEL_BERNOULLI_BETA:
+            vtable->stats_size = bernoulli_beta_stats_size_fn;
+            vtable->prior_stats = bernoulli_beta_prior_stats_fn;
+            vtable->update_stats = bernoulli_beta_update_stats_fn;
+            vtable->predictive_logpdf = bernoulli_beta_predictive_logpdf_fn;
+            vtable->copy_stats = bernoulli_beta_copy_stats_fn;
             break;
         
         default:
@@ -255,10 +295,12 @@ int bocpd_init(BOCPDState* state, ObsModelType obs_model_type,
     switch (obs_model_type) {
         case OBS_MODEL_GAUSSIAN_NIG:
             state->obs_params.gaussian_nig = *(const GaussianNIGParams*)obs_params;
+            state->obs_params_ptr = &state->obs_params.gaussian_nig;
             break;
             
         case OBS_MODEL_STUDENT_T_NG:
             state->obs_params.student_t_ng = *(const StudentTNGParams*)obs_params;
+            state->obs_params_ptr = &state->obs_params.student_t_ng;
             break;
             
         case OBS_MODEL_STUDENT_T_NG_GRID: {
@@ -296,6 +338,7 @@ int bocpd_init(BOCPDState* state, ObsModelType obs_model_type,
             state->obs_params.student_t_ng_grid.K = K;
             state->obs_params.student_t_ng_grid.nu_grid = state->owned_nu_grid;
             state->obs_params.student_t_ng_grid.nu_prior = state->owned_nu_prior;
+            state->obs_params_ptr = &state->obs_params.student_t_ng_grid;
             break;
         }
             
@@ -309,6 +352,21 @@ int bocpd_init(BOCPDState* state, ObsModelType obs_model_type,
             }
             
             state->obs_params.poisson_gamma = *pg_params;
+            state->obs_params_ptr = &state->obs_params.poisson_gamma;
+            break;
+        }
+            
+        case OBS_MODEL_BERNOULLI_BETA: {
+            const BernoulliBetaParams* bb_params = (const BernoulliBetaParams*)obs_params;
+            
+            // Validate parameters (checked once here, not in hot loop)
+            if (!isfinite(bb_params->alpha0) || !isfinite(bb_params->beta0) ||
+                !(bb_params->alpha0 > 0.0) || !(bb_params->beta0 > 0.0)) {
+                goto fail;
+            }
+            
+            state->obs_params.bernoulli_beta = *bb_params;
+            state->obs_params_ptr = &state->obs_params.bernoulli_beta;
             break;
         }
             
@@ -427,7 +485,7 @@ double* bocpd_update(BOCPDState* state, double x, double* cp_prob_out)
     int32_t R = state->max_run_length;
     size_t stats_size = state->stats_size;
     ObsModelVTable* vtable = &state->obs_vtable;
-    const void* params = &state->obs_params;
+    const void* params = state->obs_params_ptr;  // Use stored pointer (proper aliasing)
     
     // Initialize new arrays
     for (int32_t i = 0; i <= R; i++) {
@@ -447,6 +505,12 @@ double* bocpd_update(BOCPDState* state, double x, double* cp_prob_out)
     
     // CRITICAL: Compute CP predictive using PRIOR-to-x stats
     double log_pred_cp = vtable->predictive_logpdf(new_stats_0, params, x);
+    
+    // Guard against invalid observations that would brick the filter
+    // (e.g., non-binary for Bernoulli, non-integer for Poisson)
+    if (log_pred_cp == -INFINITY || isnan(log_pred_cp)) {
+        return NULL;  // Signal error upward (invalid data)
+    }
     
     // CRITICAL: Update r=0 stats to incorporate x (for next time step)
     vtable->update_stats(new_stats_0, params, x);
@@ -528,12 +592,9 @@ double* bocpd_update(BOCPDState* state, double x, double* cp_prob_out)
     return state->posterior_r;
 }
 
-int bocpd_batch_update(
-    BOCPDState* state,
-    const double* x_array,
-    int32_t n_obs,
-    double* cp_probs_out
-) {
+int bocpd_batch_update(BOCPDState* state, const double* x_array, int32_t n_obs,
+                        double* cp_probs_out) 
+{
     for (int32_t i = 0; i < n_obs; i++) {
         double cp_prob;
         if (bocpd_update(state, x_array[i], &cp_prob) == NULL) {
@@ -546,7 +607,8 @@ int bocpd_batch_update(
     return 0;
 }
 
-int32_t bocpd_get_map_run_length(const BOCPDState* state) {
+int32_t bocpd_get_map_run_length(const BOCPDState* state)
+{
     if (!state || !state->posterior_r) {
         return -1;
     }
@@ -564,7 +626,8 @@ int32_t bocpd_get_map_run_length(const BOCPDState* state) {
     return max_r;
 }
 
-int bocpd_get_posterior(const BOCPDState* state, double* posterior_out) {
+int bocpd_get_posterior(const BOCPDState* state, double* posterior_out)
+{
     if (!state || !state->posterior_r || !posterior_out) {
         return -1;
     }

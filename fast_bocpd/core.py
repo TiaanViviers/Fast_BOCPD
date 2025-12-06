@@ -7,7 +7,7 @@ from typing import Tuple
 
 from . import _bindings
 from .hazard import ConstantHazard
-from .models import GaussianNIG, StudentTNG, PoissonGamma
+from .models import GaussianNIG, StudentTNG, PoissonGamma, BernoulliBeta
 
 
 class BOCPD:
@@ -88,6 +88,12 @@ class BOCPD:
                 alpha0=self.obs_model.alpha0,
                 beta0=self.obs_model.beta0
             )
+        elif isinstance(self.obs_model, BernoulliBeta):
+            obs_model_type = _bindings.OBS_MODEL_BERNOULLI_BETA
+            obs_params = _bindings.BernoulliBetaParams(
+                alpha0=self.obs_model.alpha0,
+                beta0=self.obs_model.beta0
+            )
         else:
             raise ValueError(f"Unsupported observation model: {type(self.obs_model)}")
         
@@ -139,8 +145,8 @@ class BOCPD:
             posterior_r: Array of P(r_t = r | x_1:t)
             cp_prob: Probability of changepoint (posterior_r[0])
         """
-        # Validate data for Poisson model (if applicable)
-        if isinstance(self.obs_model, PoissonGamma):
+        # Validate data for Poisson/Bernoulli models (if applicable)
+        if isinstance(self.obs_model, (PoissonGamma, BernoulliBeta)):
             self.obs_model.validate_data(x)
         
         cp_prob = ctypes.c_double()
@@ -171,8 +177,8 @@ class BOCPD:
         Returns:
             cp_probs: Array of changepoint probabilities for each time step
         """
-        # Validate and convert data for Poisson model (if applicable)
-        if isinstance(self.obs_model, PoissonGamma):
+        # Validate and convert data for Poisson/Bernoulli models (if applicable)
+        if isinstance(self.obs_model, (PoissonGamma, BernoulliBeta)):
             data = self.obs_model.validate_batch(data)
         else:
             data = np.ascontiguousarray(data, dtype=np.float64)

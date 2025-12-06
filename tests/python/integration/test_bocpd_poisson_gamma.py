@@ -243,7 +243,7 @@ class TestBOCPDPoissonGammaValidation:
             bocpd.update(2.5)
     
     def test_non_strict_passes_to_c_layer(self, constant_hazard):
-        """Non-strict mode passes invalid data to C, which returns -inf."""
+        """Non-strict mode: invalid data passes Python but is rejected by C layer."""
         model_non_strict = PoissonGamma(alpha0=1.0, beta0=1.0, strict=False)
         bocpd = BOCPD(model_non_strict, constant_hazard, max_run_length=50)
         
@@ -251,16 +251,11 @@ class TestBOCPDPoissonGammaValidation:
         bocpd.update(2)
         bocpd.update(3)
         
-        # C layer rejects fractional with -inf predictive
-        # ALL run lengths get -inf predictive → all-zero posterior
-        posterior, cp_prob = bocpd.update(2.5)
-        
-        # Should not crash, but posterior will be degenerate (all zeros)
-        # because all predictives are -inf
-        assert len(posterior) == 51
-        assert np.all(posterior >= 0)  # Non-negative
-        # Sum will be 0 because all log_joint values are -inf
-        assert np.isclose(posterior.sum(), 0.0, atol=1e-9)
+        # Non-integer data passes Python validation (strict=False)
+        # but C layer rejects it with -inf predictive, returning NULL
+        # This prevents the filter from bricking (correct behavior)
+        with pytest.raises(RuntimeError, match="BOCPD update failed"):
+            bocpd.update(2.5)
     
     def test_batch_strict_mode(self, constant_hazard):
         """Should validate batch data in strict mode."""
