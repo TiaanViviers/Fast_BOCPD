@@ -126,11 +126,13 @@ class BernoulliBetaParams(ctypes.Structure):
     ]
 
 
-class BernoulliBetaStats(ctypes.Structure):
-    """Matches BernoulliBetaStats in C"""
+class BinomialBetaParams(ctypes.Structure):
+    """C structure for Binomial-Beta parameters."""
     _fields_ = [
-        ("n", ctypes.c_int32),
-        ("sum_x", ctypes.c_double),
+        ("alpha0", ctypes.c_double),
+        ("beta0", ctypes.c_double),
+        ("N", ctypes.c_int32),
+        ("log_N_factorial", ctypes.c_double),  # Cached by C, set to 0.0 from Python
     ]
 
 
@@ -194,11 +196,13 @@ class BOCPDState(ctypes.Structure):
 
 
 # Enums (must match C)
+# Observation model type enum
 OBS_MODEL_GAUSSIAN_NIG = 0
 OBS_MODEL_STUDENT_T_NG = 1
 OBS_MODEL_STUDENT_T_NG_GRID = 2
 OBS_MODEL_POISSON_GAMMA = 3
 OBS_MODEL_BERNOULLI_BETA = 4
+OBS_MODEL_BINOMIAL_BETA = 5
 HAZARD_CONSTANT = 0
 
 

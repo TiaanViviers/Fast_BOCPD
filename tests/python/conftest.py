@@ -3,7 +3,7 @@ Shared pytest fixtures for Fast-BOCPD tests.
 """
 import pytest
 import numpy as np
-from fast_bocpd import GaussianNIG, StudentTNG, PoissonGamma, BernoulliBeta, ConstantHazard
+from fast_bocpd import GaussianNIG, StudentTNG, PoissonGamma, BernoulliBeta, BinomialBeta, ConstantHazard
 
 
 @pytest.fixture(autouse=True)
@@ -120,5 +120,28 @@ def test_binary_data_with_changepoint():
     n1, n2 = 150, 150
     x1 = rng.binomial(1, 0.2, size=n1)  # Low success rate
     x2 = rng.binomial(1, 0.8, size=n2)  # High success rate
+    return np.concatenate([x1, x2]).astype(np.int32)
+
+
+@pytest.fixture
+def binomial_model():
+    """Standard Binomial-Beta model for testing (N=10 trials)."""
+    return BinomialBeta(alpha0=1.0, beta0=1.0, n_trials=10)
+
+
+@pytest.fixture
+def test_binomial_data_simple():
+    """Simple binomial test data (N=10, p=0.5)."""
+    rng = np.random.default_rng(42)
+    return rng.binomial(10, 0.5, size=100).astype(np.int32)
+
+
+@pytest.fixture
+def test_binomial_data_with_changepoint():
+    """Binomial data with probability shift at t=150 (N=10)."""
+    rng = np.random.default_rng(0)
+    n1, n2 = 150, 150
+    x1 = rng.binomial(10, 0.3, size=n1)  # Low success rate (mean=3)
+    x2 = rng.binomial(10, 0.7, size=n2)  # High success rate (mean=7)
     return np.concatenate([x1, x2]).astype(np.int32)
 

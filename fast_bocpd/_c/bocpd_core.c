@@ -172,6 +172,38 @@ static void bernoulli_beta_copy_stats_fn(void* dst, const void* src, const void*
     bernoulli_beta_copy_stats(dst, src);
 }
 
+/* Binomial-Beta vtable functions */
+static size_t binomial_beta_stats_size_fn(const void* params) {
+    (void)params;  // unused
+    return sizeof(BinomialBetaStats);
+}
+
+static void binomial_beta_prior_stats_fn(void* stats, const void* params) {
+    (void)params;  // unused
+    binomial_beta_prior_stats((BinomialBetaStats*)stats);
+}
+
+static void binomial_beta_update_stats_fn(void* stats, const void* params, double x) {
+    binomial_beta_update_stats(
+        (BinomialBetaStats*)stats,
+        (const BinomialBetaParams*)params,
+        x
+    );
+}
+
+static double binomial_beta_predictive_logpdf_fn(const void* stats, const void* params, double x) {
+    return binomial_beta_predictive_logpdf(
+        (const BinomialBetaParams*)params,
+        (const BinomialBetaStats*)stats,
+        x
+    );
+}
+
+static void binomial_beta_copy_stats_fn(void* dst, const void* src, const void* params) {
+    (void)params;  // unused
+    binomial_beta_copy_stats(dst, src);
+}
+
 /**
  * Initialize vtable for a given observation model type
  */
@@ -215,6 +247,14 @@ static void init_obs_vtable(ObsModelVTable* vtable, ObsModelType type) {
             vtable->update_stats = bernoulli_beta_update_stats_fn;
             vtable->predictive_logpdf = bernoulli_beta_predictive_logpdf_fn;
             vtable->copy_stats = bernoulli_beta_copy_stats_fn;
+            break;
+        
+        case OBS_MODEL_BINOMIAL_BETA:
+            vtable->stats_size = binomial_beta_stats_size_fn;
+            vtable->prior_stats = binomial_beta_prior_stats_fn;
+            vtable->update_stats = binomial_beta_update_stats_fn;
+            vtable->predictive_logpdf = binomial_beta_predictive_logpdf_fn;
+            vtable->copy_stats = binomial_beta_copy_stats_fn;
             break;
         
         default:
@@ -367,6 +407,27 @@ int bocpd_init(BOCPDState* state, ObsModelType obs_model_type,
             
             state->obs_params.bernoulli_beta = *bb_params;
             state->obs_params_ptr = &state->obs_params.bernoulli_beta;
+            break;
+        }
+        
+        case OBS_MODEL_BINOMIAL_BETA: {
+            const BinomialBetaParams* bb_params = (const BinomialBetaParams*)obs_params;
+            
+            // Validate parameters
+            if (!isfinite(bb_params->alpha0) || bb_params->alpha0 <= 0.0) {
+                goto fail;
+            }
+            if (!isfinite(bb_params->beta0) || bb_params->beta0 <= 0.0) {
+                goto fail;
+            }
+            if (bb_params->N < 1) {
+                goto fail;
+            }
+            
+            // Copy params and compute cached log_N_factorial
+            state->obs_params.binomial_beta = *bb_params;
+            state->obs_params.binomial_beta.log_N_factorial = lgamma((double)bb_params->N + 1.0);
+            state->obs_params_ptr = &state->obs_params.binomial_beta;
             break;
         }
             

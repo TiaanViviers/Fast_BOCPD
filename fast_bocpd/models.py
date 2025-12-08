@@ -419,5 +419,165 @@ class BernoulliBeta:
         return np.ascontiguousarray(data, dtype=np.float64)
 
 
+class BinomialBeta:
+    """
+    Binomial likelihood with Beta prior on success probability (fixed-N count data).
+    
+    Conjugate Bayesian model for binomial outcomes with fixed number of trials.
+    Predictive distribution is Beta-Binomial.
+    
+    Use this for:
+        - Conversion rates per period (k successes in N trials)
+        - A/B testing with fixed sample sizes
+        - Aggregated binary outcomes
+        - Any {0, 1, ..., N} count data
+    
+    Prior hyperparameters:
+        alpha0: Beta prior successes (must be > 0)
+                Controls prior belief about success probability
+                Larger values = more weight on high success rates
+        beta0:  Beta prior failures (must be > 0)
+                Controls prior belief about failure probability
+                Larger values = more weight on low success rates
+                Prior mean = alpha0 / (alpha0 + beta0)
+        n_trials: Fixed number of trials per observation (must be >= 1)
+                  Each observation is k ∈ {0, 1, ..., n_trials}
+    
+    Data requirements:
+        - Must be integers: 0, 1, 2, ..., n_trials
+        - In Python, pass as int or float with .0
+        - Values > n_trials or non-integer will be rejected (strict=True)
+    
+    Special case:
+        - n_trials=1 reduces to Bernoulli-Beta (identical predictive)
+    
+    Examples:
+        # Conversion rate: 10 trials per period
+        >>> model = BinomialBeta(alpha0=1.0, beta0=1.0, n_trials=10)
+        
+        # Prior belief: success rate ≈ 0.3, N=20 trials
+        >>> model = BinomialBeta(alpha0=30.0, beta0=70.0, n_trials=20)
+        
+        # Disable strict validation (use with caution)
+        >>> model = BinomialBeta(alpha0=1.0, beta0=1.0, n_trials=10, strict=False)
+    """
+    
+    def __init__(
+        self,
+        alpha0: float,
+        beta0: float,
+        n_trials: int,
+        *,
+        strict: bool = True
+    ):
+        # Validate hyperparameters (always, even if strict=False)
+        if not isinstance(alpha0, (int, float, np.number)):
+            raise TypeError(f"alpha0 must be numeric, got {type(alpha0)}")
+        if not isinstance(beta0, (int, float, np.number)):
+            raise TypeError(f"beta0 must be numeric, got {type(beta0)}")
+        if not isinstance(n_trials, (int, np.integer)):
+            raise TypeError(f"n_trials must be integer, got {type(n_trials)}")
+        
+        alpha0 = float(alpha0)
+        beta0 = float(beta0)
+        n_trials = int(n_trials)
+        
+        if not np.isfinite(alpha0):
+            raise ValueError("alpha0 must be finite")
+        if not np.isfinite(beta0):
+            raise ValueError("beta0 must be finite")
+        if alpha0 <= 0:
+            raise ValueError("alpha0 must be > 0")
+        if beta0 <= 0:
+            raise ValueError("beta0 must be > 0")
+        if n_trials < 1:
+            raise ValueError("n_trials must be >= 1")
+        
+        self.alpha0 = alpha0
+        self.beta0 = beta0
+        self.n_trials = n_trials
+        self.strict = bool(strict)
+    
+    def validate_data(self, k):
+        """
+        Validate a single observation (used in update()).
+        
+        Args:
+            k: Observation (should be integer in 0..n_trials)
+        
+        Raises:
+            ValueError: If k is invalid and strict=True
+        """
+        if not self.strict:
+            return  # Skip validation
+        
+        # Check finite
+        if not np.isfinite(k):
+            raise ValueError(f"Observation must be finite, got {k}")
+        
+        # Check non-negative
+        if k < 0:
+            raise ValueError(f"Binomial counts must be >= 0, got {k}")
+        
+        # Check integer-ness (tolerance for floating point)
+        if abs(k - round(k)) > 1e-9:
+            raise ValueError(
+                f"Binomial counts must be integers, got {k}. "
+                f"If your data is truly continuous, use GaussianNIG or StudentTNG instead."
+            )
+        
+        # Check range
+        if round(k) > self.n_trials:
+            raise ValueError(
+                f"Binomial count must be <= n_trials ({self.n_trials}), got {k}"
+            )
+    
+    def validate_batch(self, data: np.ndarray) -> np.ndarray:
+        """
+        Validate and convert batch data to contiguous float64 array.
+        
+        Args:
+            data: Array-like of observations
+        
+        Returns:
+            Validated, contiguous float64 array
+        
+        Raises:
+            ValueError: If data is invalid and strict=True
+        """
+        # Convert to numpy array if not already
+        data = np.asarray(data)
+        
+        # Fast-path for integer dtypes (common case)
+        if np.issubdtype(data.dtype, np.integer):
+            if self.strict:
+                if np.any(data < 0):
+                    raise ValueError("Binomial counts must be >= 0")
+                if np.any(data > self.n_trials):
+                    raise ValueError(f"Binomial counts must be <= n_trials ({self.n_trials})")
+            return np.ascontiguousarray(data, dtype=np.float64)
+        
+        # Float array validation (if strict)
+        if self.strict:
+            if not np.all(np.isfinite(data)):
+                raise ValueError("All observations must be finite")
+            if np.any(data < 0):
+                raise ValueError("Binomial counts must be >= 0")
+            
+            # Check integer-ness
+            if not np.allclose(data, np.round(data), atol=1e-9):
+                raise ValueError(
+                    "Binomial counts must be integers. "
+                    "If your data is truly continuous, use GaussianNIG or StudentTNG instead."
+                )
+            
+            # Check range on rounded values (to handle near-integer floats correctly)
+            rounded = np.round(data)
+            if np.any(rounded > self.n_trials):
+                raise ValueError(f"Binomial counts must be <= n_trials ({self.n_trials})")
+        
+        return np.ascontiguousarray(data, dtype=np.float64)
+
+
 
 
