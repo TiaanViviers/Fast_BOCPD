@@ -204,6 +204,38 @@ static void binomial_beta_copy_stats_fn(void* dst, const void* src, const void* 
     binomial_beta_copy_stats(dst, src);
 }
 
+/* Gamma-Gamma vtable functions */
+static size_t gamma_gamma_stats_size_fn(const void* params) {
+    (void)params;  // unused
+    return sizeof(GammaGammaStats);
+}
+
+static void gamma_gamma_prior_stats_fn(void* stats, const void* params) {
+    (void)params;  // unused
+    gamma_gamma_prior_stats((GammaGammaStats*)stats);
+}
+
+static void gamma_gamma_update_stats_fn(void* stats, const void* params, double x) {
+    gamma_gamma_update_stats(
+        (GammaGammaStats*)stats,
+        (const GammaGammaParams*)params,
+        x
+    );
+}
+
+static double gamma_gamma_predictive_logpdf_fn(const void* stats, const void* params, double x) {
+    return gamma_gamma_predictive_logpdf(
+        (const GammaGammaParams*)params,
+        (const GammaGammaStats*)stats,
+        x
+    );
+}
+
+static void gamma_gamma_copy_stats_fn(void* dst, const void* src, const void* params) {
+    (void)params;  // unused
+    gamma_gamma_copy_stats(dst, src);
+}
+
 /**
  * Initialize vtable for a given observation model type
  */
@@ -255,6 +287,14 @@ static void init_obs_vtable(ObsModelVTable* vtable, ObsModelType type) {
             vtable->update_stats = binomial_beta_update_stats_fn;
             vtable->predictive_logpdf = binomial_beta_predictive_logpdf_fn;
             vtable->copy_stats = binomial_beta_copy_stats_fn;
+            break;
+        
+        case OBS_MODEL_GAMMA_GAMMA:
+            vtable->stats_size = gamma_gamma_stats_size_fn;
+            vtable->prior_stats = gamma_gamma_prior_stats_fn;
+            vtable->update_stats = gamma_gamma_update_stats_fn;
+            vtable->predictive_logpdf = gamma_gamma_predictive_logpdf_fn;
+            vtable->copy_stats = gamma_gamma_copy_stats_fn;
             break;
         
         default:
@@ -428,6 +468,29 @@ int bocpd_init(BOCPDState* state, ObsModelType obs_model_type,
             state->obs_params.binomial_beta = *bb_params;
             state->obs_params.binomial_beta.log_N_factorial = lgamma((double)bb_params->N + 1.0);
             state->obs_params_ptr = &state->obs_params.binomial_beta;
+            break;
+        }
+        
+        case OBS_MODEL_GAMMA_GAMMA: {
+            const GammaGammaParams* gg_params = (const GammaGammaParams*)obs_params;
+            
+            // Validate parameters
+            if (!isfinite(gg_params->alpha0) || gg_params->alpha0 <= 0.0) {
+                goto fail;
+            }
+            if (!isfinite(gg_params->beta0) || gg_params->beta0 <= 0.0) {
+                goto fail;
+            }
+            if (!isfinite(gg_params->shape) || gg_params->shape <= 0.0) {
+                goto fail;
+            }
+            // Recommend shape >= 1 (enforced in Python strict mode)
+            // Here we allow shape < 1 but the predictive handles it defensively
+            
+            // Copy params and compute cached log_gamma_k
+            state->obs_params.gamma_gamma = *gg_params;
+            state->obs_params.gamma_gamma.log_gamma_k = lgamma(gg_params->shape);
+            state->obs_params_ptr = &state->obs_params.gamma_gamma;
             break;
         }
             

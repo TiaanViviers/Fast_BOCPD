@@ -9,6 +9,7 @@
 #include "poisson_gamma.h"
 #include "bernoulli_beta.h"
 #include "binomial_beta.h"
+#include "gamma_gamma_fixed_shape.h"
 #include "hazard.h"
 
 /**
@@ -59,7 +60,8 @@ typedef enum {
     OBS_MODEL_STUDENT_T_NG_GRID = 2,
     OBS_MODEL_POISSON_GAMMA = 3,
     OBS_MODEL_BERNOULLI_BETA = 4,
-    OBS_MODEL_BINOMIAL_BETA = 5
+    OBS_MODEL_BINOMIAL_BETA = 5,
+    OBS_MODEL_GAMMA_GAMMA = 6
 } ObsModelType;
 
 /**
@@ -79,6 +81,7 @@ typedef union {
     PoissonGammaParams poisson_gamma;
     BernoulliBetaParams bernoulli_beta;
     BinomialBetaParams binomial_beta;
+    GammaGammaParams gamma_gamma;
 } ObsModelParams;
 
 /**

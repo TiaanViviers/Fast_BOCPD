@@ -579,5 +579,148 @@ class BinomialBeta:
         return np.ascontiguousarray(data, dtype=np.float64)
 
 
+class GammaGamma:
+    """
+    Gamma likelihood with Gamma prior on rate parameter (fixed-shape scale data).
+    
+    Conjugate Bayesian model for positive continuous data with fixed shape.
+    Predictive distribution is Beta-prime-like.
+    
+    Likelihood: x ~ Gamma(shape=k, rate=λ)  [fixed k, unknown λ]
+    Prior:      λ ~ Gamma(alpha0, beta0)
+    
+    Use this for:
+        - Positive continuous data with fixed shape
+        - Exponential data (special case k=1)
+        - Waiting times, survival data, reliability analysis
+        - Data with constant coefficient of variation
+    
+    Prior hyperparameters:
+        alpha0: Prior shape parameter on rate λ (must be > 0)
+                Controls prior belief about the rate
+                Larger values = stronger prior belief
+        beta0:  Prior rate parameter on rate λ (must be > 0)
+                Controls scale of prior on rate
+                Prior mean E[λ] = alpha0 / beta0
+        shape:  Fixed shape parameter k of Gamma likelihood (default 1.0)
+                Recommended: k >= 1 for well-behaved densities
+                Special case: k=1 gives Exponential distribution
+    
+    Data requirements:
+        - Must be positive: x > 0
+        - x=0 is rejected with -∞ log density (k > 1) or special case (k ≈ 1)
+        - In strict mode: enforces shape >= 1 (recommended for stability)
+    
+    Parameterization note:
+        Uses RATE parameterization (not scale):
+        - Higher rate → smaller values
+        - Mean of Gamma(k, λ) = k/λ
+        - Variance = k/λ²
+    
+    Special case:
+        - shape=1.0: Reduces to Exponential-Gamma (conjugate for exponential data)
+    
+    Examples:
+        # Exponential waiting times (default)
+        >>> model = GammaGamma(alpha0=1.0, beta0=1.0)  # shape=1.0
+        
+        # Prior: mean rate ≈ 2.0, shape=2.0
+        >>> model = GammaGamma(alpha0=10.0, beta0=5.0, shape=2.0)
+        
+        # Disable strict mode (allow shape < 1, use with caution)
+        >>> model = GammaGamma(alpha0=1.0, beta0=1.0, shape=0.5, strict=False)
+    """
+    
+    def __init__(
+        self,
+        alpha0: float,
+        beta0: float,
+        shape: float = 1.0,
+        *,
+        strict: bool = True
+    ):
+        # Validate hyperparameters (always, even if strict=False)
+        if not isinstance(alpha0, (int, float, np.number)):
+            raise TypeError(f"alpha0 must be numeric, got {type(alpha0)}")
+        if not isinstance(beta0, (int, float, np.number)):
+            raise TypeError(f"beta0 must be numeric, got {type(beta0)}")
+        if not isinstance(shape, (int, float, np.number)):
+            raise TypeError(f"shape must be numeric, got {type(shape)}")
+        
+        alpha0 = float(alpha0)
+        beta0 = float(beta0)
+        shape = float(shape)
+        
+        if not np.isfinite(alpha0):
+            raise ValueError("alpha0 must be finite")
+        if not np.isfinite(beta0):
+            raise ValueError("beta0 must be finite")
+        if not np.isfinite(shape):
+            raise ValueError("shape must be finite")
+        
+        if alpha0 <= 0:
+            raise ValueError("alpha0 must be > 0")
+        if beta0 <= 0:
+            raise ValueError("beta0 must be > 0")
+        if shape <= 0:
+            raise ValueError("shape must be > 0")
+        
+        # Strict mode: enforce shape >= 1 recommendation
+        if strict and shape < 1.0:
+            raise ValueError(
+                "shape must be >= 1.0 in strict mode (recommended for well-behaved densities). "
+                "Set strict=False to allow shape < 1, but use with caution."
+            )
+        
+        self.alpha0 = alpha0
+        self.beta0 = beta0
+        self.shape = shape
+        self.strict = bool(strict)
+    
+    def validate_data(self, x):
+        """
+        Validate a single observation (used in update()).
+        
+        Args:
+            x: Observation (should be positive)
+        
+        Raises:
+            ValueError: If x is invalid and strict=True
+        """
+        if not self.strict:
+            return  # Skip validation
+        
+        # Check finite
+        if not np.isfinite(x):
+            raise ValueError(f"Observation must be finite, got {x}")
+        
+        # Check positive (x=0 is allowed but gives -∞ density in most cases)
+        if x < 0:
+            raise ValueError(f"Gamma data must be non-negative, got {x}")
+    
+    def validate_batch(self, data: np.ndarray) -> np.ndarray:
+        """
+        Validate and convert batch data to contiguous float64 array.
+        
+        Args:
+            data: Array-like of observations
+        
+        Returns:
+            Validated, contiguous float64 array
+        
+        Raises:
+            ValueError: If data is invalid and strict=True
+        """
+        # Convert to numpy array if not already
+        data = np.asarray(data)
+        
+        # Validation (if strict)
+        if self.strict:
+            if not np.all(np.isfinite(data)):
+                raise ValueError("All observations must be finite")
+            if np.any(data < 0):
+                raise ValueError("Gamma data must be non-negative")
+        
+        return np.ascontiguousarray(data, dtype=np.float64)
 
 

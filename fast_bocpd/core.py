@@ -13,6 +13,7 @@ from .models import (
     PoissonGamma,
     BernoulliBeta,
     BinomialBeta,
+    GammaGamma,
 )
 
 
@@ -107,6 +108,14 @@ class BOCPD:
                 beta0=self.obs_model.beta0,
                 N=self.obs_model.n_trials,
                 log_N_factorial=0.0  # Will be set by C in bocpd_init
+            )
+        elif isinstance(self.obs_model, GammaGamma):
+            obs_model_type = _bindings.OBS_MODEL_GAMMA_GAMMA
+            obs_params = _bindings.GammaGammaParams(
+                alpha0=self.obs_model.alpha0,
+                beta0=self.obs_model.beta0,
+                shape=self.obs_model.shape,
+                log_gamma_k=0.0  # Will be set by C in bocpd_init
             )
         else:
             raise ValueError(f"Unsupported observation model: {type(self.obs_model)}")

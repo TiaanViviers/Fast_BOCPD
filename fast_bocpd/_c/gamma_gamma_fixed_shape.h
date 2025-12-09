@@ -29,9 +29,10 @@
  *   - Right-skewed distributions
  * 
  * Implementation notes:
- *   - Recommend k >= 1 to avoid infinite density at x=0
+ *   - Recommend shape >= 1 to avoid infinite density at x=0
+ *   - For shape < 1, x=0 returns -inf (prevents BOCPD poisoning)
  *   - Cached lgamma(k) for efficiency
- *   - Numerically stable log-space computation
+ *   - Numerically stable log-space computation with log1p
  */
 
 #ifndef GAMMA_GAMMA_FIXED_SHAPE_H
@@ -39,10 +40,6 @@
 
 #include <stddef.h>
 #include <stdint.h>
-
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 /**
  * Parameters for Gamma-Gamma model.
@@ -118,6 +115,7 @@ void gamma_gamma_update_stats(GammaGammaStats* stats,
  *   - x < 0: returns -∞ (invalid domain)
  *   - x = 0 and k > 1: returns -∞ (zero density at origin)
  *   - x = 0 and k = 1: special case (Exponential at origin)
+ *   - x = 0 and k < 1: returns -∞ (avoids +∞ BOCPD poisoning)
  *   - Invalid params/stats: returns -∞ (defensive)
  * 
  * Args:
@@ -140,9 +138,5 @@ double gamma_gamma_predictive_logpdf(const GammaGammaParams* params,
  *   src: Source
  */
 void gamma_gamma_copy_stats(void* dst, const void* src);
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif  // GAMMA_GAMMA_FIXED_SHAPE_H

@@ -41,6 +41,8 @@ double gamma_gamma_predictive_logpdf(const GammaGammaParams* params,
     if (!isfinite(params->shape) || params->shape <= 0.0) {
         return -INFINITY;
     }
+    // Recommended: shape >= 1 to avoid x=0 singularity (enforced in Python strict mode)
+    // Here we defensively allow shape < 1 but handle x=0 carefully below
     if (!isfinite(params->log_gamma_k)) {
         return -INFINITY;  // Corrupted cache
     }
@@ -63,15 +65,26 @@ double gamma_gamma_predictive_logpdf(const GammaGammaParams* params,
     
     // Handle x = 0 edge case
     if (x == 0.0) {
-        if (params->shape > 1.0) {
+        double k = params->shape;
+        
+        // Use tolerance to avoid floating-point exact equality issues
+        const double k_tolerance = 1e-12;
+        
+        if (k > 1.0 + k_tolerance) {
             // Gamma(k > 1) has zero density at origin
             return -INFINITY;
         }
-        // k == 1 (Exponential): special case to avoid 0 * log(0) NaN
+        if (k < 1.0 - k_tolerance) {
+            // Gamma(k < 1) has infinite density at origin
+            // Return -INFINITY to avoid poisoning BOCPD's log-sum-exp
+            // (mathematically impure but pragmatically correct for BOCPD)
+            return -INFINITY;
+        }
+        
+        // k ≈ 1.0 (Exponential): special case to avoid 0 * log(0) NaN
         // Predictive at x=0 for Exponential:
         //   p(0) = α_n / β_n  (after marginalizing λ)
         // So log p(0) = log(α_n) - log(β_n)
-        double k = params->shape;
         double alpha_n = params->alpha0 + (double)stats->n * k;
         double beta_n = params->beta0 + stats->sum_x;
         
@@ -112,11 +125,14 @@ double gamma_gamma_predictive_logpdf(const GammaGammaParams* params,
     double term1 = log_gamma_alpha_n_plus_k - log_gamma_alpha_n - log_gamma_k;
     double term2 = alpha_n * log(beta_n);
     double term3 = (k - 1.0) * log(x);
-    double term4 = -(alpha_n + k) * log(beta_n + x);
+    
+    // Numerical stability: use log1p when x is small compared to beta_n
+    double log_beta_n_plus_x = log(beta_n) + log1p(x / beta_n);
+    double term4 = -(alpha_n + k) * log_beta_n_plus_x;
     
     double logp = term1 + term2 + term3 + term4;
     
-    // Final sanity check (should be <= 0 for valid PDF)
+    // Final sanity check
     if (!isfinite(logp)) {
         return -INFINITY;
     }

@@ -136,6 +136,16 @@ class BinomialBetaParams(ctypes.Structure):
     ]
 
 
+class GammaGammaParams(ctypes.Structure):
+    """C structure for Gamma-Gamma (fixed shape) parameters."""
+    _fields_ = [
+        ("alpha0", ctypes.c_double),
+        ("beta0", ctypes.c_double),
+        ("shape", ctypes.c_double),
+        ("log_gamma_k", ctypes.c_double),  # Cached by C, set to 0.0 from Python
+    ]
+
+
 class ConstantHazardParams(ctypes.Structure):
     """Matches ConstantHazardParams in C"""
     _fields_ = [
@@ -153,6 +163,8 @@ class ObsModelParams(ctypes.Union):
         ("student_t_ng_grid", StudentTNGGridParams),
         ("poisson_gamma", PoissonGammaParams),
         ("bernoulli_beta", BernoulliBetaParams),
+        ("binomial_beta", BinomialBetaParams),
+        ("gamma_gamma", GammaGammaParams),
     ]
 
 
@@ -203,6 +215,7 @@ OBS_MODEL_STUDENT_T_NG_GRID = 2
 OBS_MODEL_POISSON_GAMMA = 3
 OBS_MODEL_BERNOULLI_BETA = 4
 OBS_MODEL_BINOMIAL_BETA = 5
+OBS_MODEL_GAMMA_GAMMA = 6
 HAZARD_CONSTANT = 0
 
 

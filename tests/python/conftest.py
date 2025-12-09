@@ -3,7 +3,7 @@ Shared pytest fixtures for Fast-BOCPD tests.
 """
 import pytest
 import numpy as np
-from fast_bocpd import GaussianNIG, StudentTNG, PoissonGamma, BernoulliBeta, BinomialBeta, ConstantHazard
+from fast_bocpd import GaussianNIG, StudentTNG, PoissonGamma, BernoulliBeta, BinomialBeta, GammaGamma, ConstantHazard
 
 
 @pytest.fixture(autouse=True)
@@ -144,4 +144,38 @@ def test_binomial_data_with_changepoint():
     x1 = rng.binomial(10, 0.3, size=n1)  # Low success rate (mean=3)
     x2 = rng.binomial(10, 0.7, size=n2)  # High success rate (mean=7)
     return np.concatenate([x1, x2]).astype(np.int32)
+
+
+@pytest.fixture
+def gamma_gamma_params():
+    """Standard Gamma-Gamma parameters for testing."""
+    return {
+        'alpha0': 2.0,
+        'beta0': 1.0,
+        'shape': 1.5
+    }
+
+
+@pytest.fixture
+def gamma_gamma_model(gamma_gamma_params):
+    """Gamma-Gamma model instance."""
+    return GammaGamma(**gamma_gamma_params)
+
+
+@pytest.fixture
+def test_gamma_data_simple():
+    """Simple Gamma/Exponential test data."""
+    rng = np.random.default_rng(42)
+    return rng.exponential(scale=2.0, size=100)
+
+
+@pytest.fixture
+def test_gamma_data_with_changepoint():
+    """Gamma data with rate change at t=100."""
+    rng = np.random.default_rng(42)
+    # Low rate (mean=2.0)
+    segment1 = rng.exponential(scale=2.0, size=100)
+    # High rate (mean=0.5)
+    segment2 = rng.exponential(scale=0.5, size=100)
+    return np.concatenate([segment1, segment2])
 
