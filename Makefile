@@ -118,6 +118,7 @@ clean:
 	rm -rf $(BUILD_DIR)
 	find . -type f -name "*.o" -delete
 	find . -type f -name "*.so" -delete
+	find . -type f -name "*.npy" -delete
 	find . -type d -name "__pycache__" -exec rm -rf {} +
 	find . -type d -name ".pytest_cache" -exec rm -rf {} +
 	find . -type d -name "*.egg-info" -exec rm -rf {} +
