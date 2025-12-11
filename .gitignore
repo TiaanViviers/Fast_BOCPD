@@ -8,6 +8,10 @@ __pycache__/
 *.txt
 *.npy
 
+# Competitor libraries (cloned for benchmarking, not part of our repo)
+benchmarks/competitors/*/
+!benchmarks/competitors/requirements.txt
+
 # C extensions
 *.so
 *.dylib
