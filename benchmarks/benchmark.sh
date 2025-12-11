@@ -10,6 +10,25 @@ test_data_exists() {
     fi
 }
 
+benchmark_Fbocpd() {
+    echo "Running Fast-BOCPD benchmarks"
+    cd scripts
+    python3 benchmark_fast_bocpd.py --distribution gaussian
+    python3 benchmark_fast_bocpd.py --distribution student_t_fixed
+    python3 benchmark_fast_bocpd.py --distribution student_t_grid
+    python3 benchmark_fast_bocpd.py --distribution bernoulli
+    python3 benchmark_fast_bocpd.py --distribution binomial
+    python3 benchmark_fast_bocpd.py --distribution poisson
+    python3 benchmark_fast_bocpd.py --distribution gamma
+    cd ..
+}
+
+benchmark_competitors() {
+    echo "Running competitor benchmarks"
+    cd scripts
+    cd ..
+}
+
 # Check if data files exist for gaussian
 echo "Checking data files..."
 test_data_exists gaussian 1000
@@ -40,9 +59,47 @@ test_data_exists gamma 1000
 test_data_exists gamma 10000
 test_data_exists gamma 100000
 
-# Run benchmarks for univariate gaussian
-echo ""
-echo "Running benchmarks..."
-cd scripts
-#python3 benchmark_uv_gaussian.py
-cd ..
+
+arg1=$1
+if [ "$arg1" == "." ]; then
+    benchmark_Fbocpd
+    benchmark_competitors
+elif [ "$arg1" == "Fbocpd" ]; then
+    benchmark_Fbocpd
+elif [ "$arg1" == "competitors" ]; then
+    benchmark_competitors
+elif [ "$arg1" == "gaussian" ]; then
+    cd scripts
+    python3 benchmark_fast_bocpd.py --distribution gaussian
+    cd ..
+elif [ "$arg1" == "student_t_fixed" ]; then
+    cd scripts
+    python3 benchmark_fast_bocpd.py --distribution student_t_fixed
+    cd ..
+elif [ "$arg1" == "student_t_grid" ]; then
+    cd scripts
+    python3 benchmark_fast_bocpd.py --distribution student_t_grid
+    cd ..
+elif [ "$arg1" == "bernoulli" ]; then
+    cd scripts
+    python3 benchmark_fast_bocpd.py --distribution bernoulli
+    cd ..
+elif [ "$arg1" == "binomial" ]; then
+    cd scripts
+    python3 benchmark_fast_bocpd.py --distribution binomial
+    cd ..
+elif [ "$arg1" == "poisson" ]; then
+    cd scripts
+    python3 benchmark_fast_bocpd.py --distribution poisson
+    cd ..
+elif [ "$arg1" == "gamma" ]; then
+    cd scripts
+    python3 benchmark_fast_bocpd.py --distribution gamma
+    cd ..
+else
+    echo "Please provide a valid argument:"
+    echo "  .                     Run all benchmarks"
+    echo "  Fbocpd                Run Fast-BOCPD benchmarks"
+    echo "  competitors           Run competitor benchmarks"
+    echo "  <distribution_name>   Run benchmark for specific distribution"
+fi

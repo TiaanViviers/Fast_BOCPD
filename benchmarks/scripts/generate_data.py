@@ -124,7 +124,7 @@ def generate_student_t(n, seg_len, num_segments, df=None):
     if df is None: rand_df = True
 
     for _ in range(num_segments):
-        mu = (mu + 5) if mu <= 40 else 0
+        mu = (mu + 5) if mu < 25 else 5
         df = np.random.randint(3, 30) if rand_df else df
         sigma = np.random.uniform(0.5, 2.5)
         standard_seg = np.random.standard_t(df=df, size=seg_len)
@@ -134,7 +134,7 @@ def generate_student_t(n, seg_len, num_segments, df=None):
     # Handle remaining observations
     remaining = n % seg_len
     if remaining > 0:
-        mu = (mu + 5) if mu <= 40 else 0
+        mu = (mu + 5) if mu < 25 else 5
         df = np.random.randint(3, 30) if rand_df else df
         sigma = np.random.uniform(0.5, 2.5)
         standard_seg = np.random.standard_t(df=df, size=remaining)

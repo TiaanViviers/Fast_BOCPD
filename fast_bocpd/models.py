@@ -59,11 +59,11 @@ class StudentTNG:
         
         # Grid ν (infer best ν from data)
         >>> model = StudentTNG(mu0=0, kappa0=1, alpha0=1, beta0=1,
-        ...                    nu_grid=[2, 3, 5, 10, 20])
+        ...                    nu=[2, 3, 5, 10, 20])
         
         # Grid ν with custom prior
         >>> model = StudentTNG(mu0=0, kappa0=1, alpha0=1, beta0=1,
-        ...                    nu_grid=[2, 3, 5], nu_prior=[0.2, 0.5, 0.3])
+        ...                    nu=[2, 3, 5], nu_prior=[0.2, 0.5, 0.3])
     """
 
     def __init__(
