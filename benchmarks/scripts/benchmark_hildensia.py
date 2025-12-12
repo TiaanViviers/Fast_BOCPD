@@ -67,14 +67,10 @@ def benchmark_hildensia(
         print(f"WARNING: CUDA requested but not available. Falling back to CPU.")
         device = "cpu"
     
-    # Keep both forms: torch.device for .to() and sync, string for library APIs
     torch_device = torch.device(device)
     device_str = "cuda" if torch_device.type == "cuda" else "cpu"
     n = len(data)
     
-    # WARNING: Hildensia's online implementation has O(n²) complexity
-    # CPU: only run <= 1000 (too slow)
-    # GPU: allow up to 10000 (may OOM at 100k)
     if mode == "online":
         if device_str == "cpu" and n > 1000:
             print(f"WARNING: Hildensia online mode has O(n²) complexity on CPU.")
@@ -98,6 +94,7 @@ def benchmark_hildensia(
     
     # Warmup runs
     for i in range(warmup):
+        print(f" Warmup run {i+1}/{warmup}...")
         if mode == "online":
             _run_online(data_tensor, lambda_, alpha, beta, kappa, mu, torch_device, device_str)
         else:
@@ -106,6 +103,7 @@ def benchmark_hildensia(
     # Timed runs
     times = []
     for i in range(runs):
+        print(f" Timed run {i+1}/{runs}...")
         if mode == "online":
             elapsed = _run_online(data_tensor, lambda_, alpha, beta, kappa, mu, torch_device, device_str)
         else:

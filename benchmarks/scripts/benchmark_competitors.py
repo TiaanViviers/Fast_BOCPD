@@ -2,15 +2,9 @@ import argparse
 import numpy as np
 from pathlib import Path
 
-#from benchmark_dtolpin_bocd import benchmark_dtolpin_bocd
-#from benchmark_ruptures import benchmark_ruptures
+from benchmark_dtolpin_bocd import benchmark_dtolpin_bocd
+from benchmark_ruptures import benchmark_ruptures
 from benchmark_hildensia import benchmark_hildensia
-
-def benchmark_dtolpin_bocd(data):
-    pass
-
-def benchmark_ruptures(data, distribution, mode, lambda_, runs, warmup):
-    pass
 
 def main():
     args = parse_args()
@@ -102,8 +96,8 @@ def run_hildensia_benchmark(args):
         results[name] = {}
         
         # Run online mode: CPU-only for n <= 1000, GPU for all sizes
-        if device == "cpu" and n_obs > 1000:
-            print(f"Skipping Hildensia for n={name} on CPU (O(n²) complexity, would take ~{(n_obs/100)**2 * 0.6/60:.1f} minutes)")
+        if n_obs > 1000:
+            print(f"Skipping Hildensia for n={name} (O(n²) complexity, would take ~{(n_obs/100)**2 * 0.6/60:.1f} minutes)")
             results[name]['online'] = None
         else:
             print(f"Running Hildensia online mode for n={name} on {device}...")
