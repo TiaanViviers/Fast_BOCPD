@@ -2,14 +2,11 @@ import argparse
 import numpy as np
 from pathlib import Path
 
-#from benchmark_dtolpin_bocd import benchmark_dtolpin_bocd
-#from benchmark_ruptures import benchmark_ruptures
+from benchmark_dtolpin_bocd import benchmark_dtolpin_bocd
+from benchmark_ruptures import benchmark_ruptures
 from benchmark_hildensia import benchmark_hildensia
+from benchmark_promised_ai import benchmark_promised_ai
 
-def benchmark_dtolpin_bocd(data):
-    pass
-def benchmark_ruptures(data, distribution, mode, lambda_, runs, warmup):
-    pass
 
 def main():
     args = parse_args()
@@ -25,9 +22,14 @@ def main():
         print_summary(ruptures_results)
     
     elif args.lib == 'hildensia':
-        print_start("hildensia/bayesian_changepoint_detection", args.lambda_, args.runs, args.warmup_runs)
+        print_start("hildensia/bayesian_changepoint_detection", args.lambda_, args.runs, args.warmup_runs, args.device)
         hildensia_results = run_hildensia_benchmark(args)
         print_summary(hildensia_results)
+    
+    elif args.lib == 'promised-ai':
+        print_start("promised-ai/changepoint", args.lambda_, args.runs, args.warmup_runs)
+        promised_ai_results = run_promised_ai_benchmark(args)
+        print_summary(promised_ai_results)
     
     else:
         print_start("dtolpin/bocd", args.lambda_, args.runs, args.warmup_runs)
@@ -38,9 +40,13 @@ def main():
         ruptures_results = run_ruptures_benchmark(args)
         print_summary(ruptures_results)
         
-        print_start("hildensia/bayesian_changepoint_detection", args.lambda_, args.runs, args.warmup_runs)
+        print_start("hildensia/bayesian_changepoint_detection", args.lambda_, args.runs, args.warmup_runs, args.device)
         hildensia_results = run_hildensia_benchmark(args)
         print_summary(hildensia_results)
+        
+        print_start("promised-ai/changepoint", args.lambda_, args.runs, args.warmup_runs)
+        promised_ai_results = run_promised_ai_benchmark(args)
+        print_summary(promised_ai_results)
 
 
 #===============================================================================
@@ -133,6 +139,47 @@ def run_hildensia_benchmark(args):
 
     return results
 
+
+def run_promised_ai_benchmark(args):
+    """Run benchmark for promised-ai/changepoint.
+    
+    Note: This Rust-based library only supports online mode (no offline).
+          It should be very fast due to Rust implementation.
+          
+    Supported distributions:
+        - Gaussian (NormalGamma prior)
+        - Bernoulli (BetaBernoulli prior)
+        - Poisson (PoissonGamma prior)
+    """
+    # Only benchmark distributions that promised-ai actually supports
+    # Don't try to fit Gaussian models to Student-t data - that's unfair!
+    supported_distributions = ['gaussian', 'bernoulli', 'poisson']
+    
+    results = {}
+    
+    # Benchmark each supported distribution
+    for distribution in supported_distributions:
+        files = get_files(distribution, args.size)
+        if not files:
+            continue
+            
+        for file in files:
+            data = np.load(file)
+            name = f"{distribution}_{get_file_size(file)}"
+            
+            online_results = benchmark_promised_ai(
+                data,
+                distribution=distribution,  # Use distribution name directly
+                lambda_=args.lambda_,
+                runs=args.runs,
+                warmup=args.warmup_runs
+            )
+            
+            results[name] = {'online': online_results, 'offline': None}
+    
+    return results
+
+
 #===============================================================================
 # Setup Helper Functions
 #===============================================================================
@@ -185,11 +232,11 @@ def print_summary(all_results):
         if device_info:
             break
     
-    print(f"\n{'='*75}")
+    print(f"\n{'='*95}")
     print(f"SUMMARY{device_info}")
-    print(f"{'='*75}")
-    print(f"{'Size':<10} {'Mode':<10} {'Median (s)':>12} {'Throughput':>15} {'CV%':>8}")
-    print(f"{'-'*75}")
+    print(f"{'='*95}")
+    print(f"{'Dataset':<30} {'Mode':<10} {'Median (s)':>12} {'Throughput':>15} {'CV%':>8}")
+    print(f"{'-'*95}")
     
     # Sort by size (extract n_obs from first available mode)
     def get_n_obs(size_key):
@@ -209,17 +256,17 @@ def print_summary(all_results):
         # Print online results if available and not None
         if 'online' in result and result['online'] is not None:
             online = result['online']
-            print(f"{size:<10} {'Online':<10} {online['median']:>12.4f} {online['throughput']:>15,.0f} {online['cv_percent']:>7.1f}%")
+            print(f"{size:<30} {'Online':<10} {online['median']:>12.4f} {online['throughput']:>15,.0f} {online['cv_percent']:>7.1f}%")
         elif 'online' in result and result['online'] is None:
-            print(f"{size:<10} {'Online':<10} {'SKIPPED':>12} {'(O(n²) too slow)':>15} {'-':>8}")
+            print(f"{size:<30} {'Online':<10} {'SKIPPED':>12} {'(O(n²) too slow)':>15} {'-':>8}")
         
         # Print offline results if available and not None
         if 'offline' in result and result['offline'] is not None:
             offline = result['offline']
-            size_label = '' if ('online' in result and result['online'] is not None) else size  # Only show size once
-            print(f"{size_label:<10} {'Offline':<10} {offline['median']:>12.4f} {offline['throughput']:>15,.0f} {offline['cv_percent']:>7.1f}%")
+            size_label = '' if ('online' in result and result['online'] is not None) else size  # Only show dataset once
+            print(f"{size_label:<30} {'Offline':<10} {offline['median']:>12.4f} {offline['throughput']:>15,.0f} {offline['cv_percent']:>7.1f}%")
 
-    print(f"{'='*75}")
+    print(f"{'='*95}")
 
 
 #===============================================================================
@@ -232,7 +279,7 @@ def parse_args():
     )
     parser.add_argument(
         "--lib",
-        choices=['dtolpin', 'ruptures', 'hildensia'],
+        choices=['dtolpin', 'ruptures', 'hildensia', 'promised-ai'],
         help="Competitor library to benchmark.",
     )
     parser.add_argument(
