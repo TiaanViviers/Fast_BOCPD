@@ -4,6 +4,7 @@ from pathlib import Path
 
 from benchmark_dtolpin_bocd import benchmark_dtolpin_bocd
 from benchmark_ruptures import benchmark_ruptures
+from benchmark_hildensia import benchmark_hildensia
 
 
 def main():
@@ -13,10 +14,29 @@ def main():
         print_start("dtolpin/bocd", args.lambda_, args.runs, args.warmup_runs)
         dtolpin_results = run_dtolpin_benchmark(args)
         print_summary(dtolpin_results)
+
     elif args.lib == 'ruptures':
         print_start("ruptures", args.lambda_, args.runs, args.warmup_runs)
         ruptures_results = run_ruptures_benchmark(args)
         print_summary(ruptures_results)
+    
+    elif args.lib == 'hildensia':
+        print_start("hildensia/bayesian_changepoint_detection", args.lambda_, args.runs, args.warmup_runs)
+        hildensia_results = run_hildensia_benchmark(args)
+        print_summary(hildensia_results)
+    
+    else:
+        print_start("dtolpin/bocd", args.lambda_, args.runs, args.warmup_runs)
+        dtolpin_results = run_dtolpin_benchmark(args)
+        print_summary(dtolpin_results)
+        
+        print_start("ruptures", args.lambda_, args.runs, args.warmup_runs)
+        ruptures_results = run_ruptures_benchmark(args)
+        print_summary(ruptures_results)
+        
+        print_start("hildensia/bayesian_changepoint_detection", args.lambda_, args.runs, args.warmup_runs)
+        hildensia_results = run_hildensia_benchmark(args)
+        print_summary(hildensia_results)
 
 
 #===============================================================================
@@ -55,6 +75,57 @@ def run_ruptures_benchmark(args):
         name = get_file_size(file)
         results[name] = {'offline': offline_results}
         print("done with size: ", name)
+
+    return results
+
+
+def run_hildensia_benchmark(args):
+    """Run benchmark for hildensia/bayesian_changepoint_detection.
+    
+    Note: Online mode has O(n²) complexity on CPU - only runs on n=1000.
+          GPU mode can handle larger sizes. Offline mode runs on all sizes.
+    """
+    files = get_files('gaussian', args.size)
+    device = args.device
+    
+    results = {}
+    for file in files:
+        data = np.load(file)
+        name = get_file_size(file)
+        n_obs = len(data)
+        
+        results[name] = {}
+        
+        # Run online mode: CPU-only for n <= 1000, GPU for all sizes
+        if device == "cpu" and n_obs > 1000:
+            print(f"Skipping Hildensia for n={name} on CPU (O(n²) complexity, would take ~{(n_obs/100)**2 * 0.6/60:.1f} minutes)")
+            results[name]['online'] = None
+        else:
+            print(f"Running Hildensia online mode for n={name} on {device}...")
+            online_results = benchmark_hildensia(
+                data,
+                distribution='gaussian',
+                mode='online',
+                lambda_=args.lambda_,
+                runs=args.runs,
+                warmup=args.warmup_runs,
+                device=device
+            )
+            results[name]['online'] = online_results
+       
+            print(f"Running Hildensia offline mode for n={name} on {device}...")
+            offline_results = benchmark_hildensia(
+                data,
+                distribution='gaussian',
+                mode='offline',
+                lambda_=args.lambda_,
+                runs=args.runs,
+                warmup=args.warmup_runs,
+                device=device
+            )
+            results[name]['offline'] = offline_results
+            
+            print(f"Completed benchmarking n={name}")
 
     return results
 
@@ -100,8 +171,18 @@ def print_start(lib, lambda_, runs, warmup):
 
 def print_summary(all_results):
     """Print final summary table."""
+    # Extract device if available (for Hildensia)
+    device_info = ""
+    for size_results in all_results.values():
+        for mode_result in size_results.values():
+            if mode_result and 'device' in mode_result:
+                device_info = f" [Device: {mode_result['device'].upper()}]"
+                break
+        if device_info:
+            break
+    
     print(f"\n{'='*75}")
-    print(f"SUMMARY")
+    print(f"SUMMARY{device_info}")
     print(f"{'='*75}")
     print(f"{'Size':<10} {'Mode':<10} {'Median (s)':>12} {'Throughput':>15} {'CV%':>8}")
     print(f"{'-'*75}")
@@ -109,9 +190,10 @@ def print_summary(all_results):
     # Sort by size (extract n_obs from first available mode)
     def get_n_obs(size_key):
         result = all_results[size_key]
-        if 'online' in result:
+        # Handle None values for skipped benchmarks
+        if result.get('online') is not None:
             return result['online']['n_obs']
-        elif 'offline' in result:
+        elif result.get('offline') is not None:
             return result['offline']['n_obs']
         return 0
     
@@ -120,15 +202,17 @@ def print_summary(all_results):
     for size in sizes:
         result = all_results[size]
         
-        # Print online results if available
-        if 'online' in result:
+        # Print online results if available and not None
+        if 'online' in result and result['online'] is not None:
             online = result['online']
             print(f"{size:<10} {'Online':<10} {online['median']:>12.4f} {online['throughput']:>15,.0f} {online['cv_percent']:>7.1f}%")
+        elif 'online' in result and result['online'] is None:
+            print(f"{size:<10} {'Online':<10} {'SKIPPED':>12} {'(O(n²) too slow)':>15} {'-':>8}")
         
-        # Print offline results if available
-        if 'offline' in result:
+        # Print offline results if available and not None
+        if 'offline' in result and result['offline'] is not None:
             offline = result['offline']
-            size_label = '' if 'online' in result else size  # Only show size once
+            size_label = '' if ('online' in result and result['online'] is not None) else size  # Only show size once
             print(f"{size_label:<10} {'Offline':<10} {offline['median']:>12.4f} {offline['throughput']:>15,.0f} {offline['cv_percent']:>7.1f}%")
 
     print(f"{'='*75}")
@@ -144,7 +228,7 @@ def parse_args():
     )
     parser.add_argument(
         "--lib",
-        choices=['dtolpin', 'ruptures'],
+        choices=['dtolpin', 'ruptures', 'hildensia'],
         help="Competitor library to benchmark.",
     )
     parser.add_argument(
@@ -171,6 +255,13 @@ def parse_args():
         type=int,
         choices=[1000, 10000, 100000],
         help="Run benchmark for specific dataset size only.",
+    )
+    parser.add_argument(
+        "--device",
+        type=str,
+        choices=["cpu", "cuda"],
+        default="cpu",
+        help="Device to run on: 'cpu' or 'cuda' (default: cpu). Only applies to Hildensia.",
     )
     return parser.parse_args()
 

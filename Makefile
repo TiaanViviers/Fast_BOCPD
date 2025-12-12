@@ -111,7 +111,7 @@ test-valgrind: $(TEST_RUNNER)
 
 # Run benchmarks
 benchmark: 
-	cd benchmarks && ./benchmark.sh && cd ..
+	cd benchmarks && ./benchmark.sh . && cd ..
 
 # Clean all build artifacts
 clean:

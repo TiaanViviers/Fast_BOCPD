@@ -1,0 +1,20 @@
+# Competitor libraries for benchmarking Fast-BOCPD
+# Install with: pip install -r requirements.txt
+
+# ruptures - Offline changepoint detection library (Python/Cython/C)
+# Repository: https://github.com/deepcharles/ruptures
+# Model: Gaussian (CostNormal), detects mean/variance changes
+ruptures>=1.1.0
+
+# bayesian-changepoint-detection - PyTorch-based BOCPD (Hildensia/estcarisimo)
+# Repository: https://github.com/hildensia/bayesian_changepoint_detection
+# Model: Student-t (same as GaussianNIG predictive), online and offline modes
+# Note: Automatically installs PyTorch and dependencies
+bayesian-changepoint-detection>=1.0.0
+
+# Dependencies for dtolpin/bocd (manually cloned)
+# Repository: https://github.com/dtolpin/bocd (clone separately)
+# The dtolpin/bocd library itself must be cloned manually:
+#   git clone https://github.com/dtolpin/bocd.git dtolpin_bocd
+numpy>=1.21.0
+scipy>=1.7.0
