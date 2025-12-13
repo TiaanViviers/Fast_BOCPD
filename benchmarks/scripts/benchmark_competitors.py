@@ -2,11 +2,17 @@ import argparse
 import numpy as np
 from pathlib import Path
 
-from benchmark_dtolpin_bocd import benchmark_dtolpin_bocd
-from benchmark_ruptures import benchmark_ruptures
+#from benchmark_dtolpin_bocd import benchmark_dtolpin_bocd
+#from benchmark_ruptures import benchmark_ruptures
 from benchmark_hildensia import benchmark_hildensia
-from benchmark_promised_ai import benchmark_promised_ai
+#from benchmark_promised_ai import benchmark_promised_ai
 
+def benchmark_promised_ai(data, distribution, lambda_, runs, warmup):
+    pass
+def bechmark_dtolpin_bocd(data):
+    pass
+def benchmark_ruptures(data, distribution, mode, lambda_, runs, warmup):
+    pass
 
 def main():
     args = parse_args()
@@ -22,7 +28,7 @@ def main():
         print_summary(ruptures_results)
     
     elif args.lib == 'hildensia':
-        print_start("hildensia/bayesian_changepoint_detection", args.lambda_, args.runs, args.warmup_runs, args.device)
+        print_start("hildensia/bayesian_changepoint_detection", args.lambda_, args.runs, args.warmup_runs)
         hildensia_results = run_hildensia_benchmark(args)
         print_summary(hildensia_results)
     
