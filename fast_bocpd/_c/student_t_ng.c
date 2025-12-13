@@ -1,14 +1,17 @@
-#include "student_t_ng.h"
 #include <math.h>
+
+#include "student_t_ng.h"
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
 
-/**
- * Validate Student-t NG parameters.
- * Returns 0 if valid, -1 if invalid.
- */
+#define S0_EPS 1e-10
+
+// =============================================================================
+// == Validation Helpers =======================================================
+// =============================================================================
+
 static int validate_params(const StudentTNGParams* params)
 {
     if (params->kappa0 <= 0.0) return -1;
@@ -22,7 +25,25 @@ static int validate_params(const StudentTNGParams* params)
     return 0;
 }
 
-void student_t_ng_prior_stats(StudentTNGStats* stats) 
+static int validate_stats(const StudentTNGStats* stats)
+{
+    if (!stats) {
+        return -1;
+    }
+    if (!isfinite(stats->S0) || !isfinite(stats->S1) || !isfinite(stats->S2)) {
+        return -1;
+    }
+    if (stats->S0 < 0.0) {
+        return -1;
+    }
+    return 0;
+}
+
+// =============================================================================
+// == Public API ===============================================================
+// =============================================================================
+
+void student_t_ng_prior_stats(StudentTNGStats* stats)
 {
     stats->S0 = 0.0;
     stats->S1 = 0.0;
@@ -32,9 +53,12 @@ void student_t_ng_prior_stats(StudentTNGStats* stats)
 static void compute_posterior_hyperparams(
     const StudentTNGParams* params,
     const StudentTNGStats* stats,
-    double* mu_n, double* kappa_n, double* alpha_n, double* beta_n) 
+    double* mu_n,
+    double* kappa_n,
+    double* alpha_n,
+    double* beta_n)
 {
-    if (stats->S0 < 1e-10) {
+    if (stats->S0 < S0_EPS) {
         // No data yet: posterior = prior
         *mu_n = params->mu0;
         *kappa_n = params->kappa0;
@@ -70,9 +94,12 @@ void student_t_ng_update_stats(
     double x
 ) 
 {
+    if (!stats) {
+        return;
+    }
     // Validate parameters
     if (validate_params(params) != 0) {
-        return;  // Invalid params, don't update
+        return;  // Invalid params dont update
     }
     
     double mu_n, kappa_n, alpha_n, beta_n;
@@ -101,11 +128,17 @@ double student_t_ng_predictive_logpdf(
     double x
 ) 
 {
-    // Validate parameters - return -inf for invalid params instead of silently fixing
     if (validate_params(params) != 0) {
         return -INFINITY;
     }
+    if (validate_stats(stats) != 0) {
+        return -INFINITY;
+    }
+    if (!isfinite(x)) {
+        return -INFINITY;
+    }
     
+    // Validate parameters - return -inf for invalid params instead of silently fixing
     double mu_n, kappa_n, alpha_n, beta_n;
     compute_posterior_hyperparams(params, stats, &mu_n, &kappa_n, &alpha_n, &beta_n);
 

@@ -1,38 +1,9 @@
-/**
- * Gamma-Gamma model (fixed shape, unknown rate)
- * 
- * Conjugate Bayesian model for continuous, non-negative observations.
- * 
- * Model specification:
- *   Likelihood: x ~ Gamma(shape=k, rate=λ)  where k is FIXED (known constant)
- *   Prior:      λ ~ Gamma(α₀, rate=β₀)     where λ is UNKNOWN
- *   Posterior:  λ | x ~ Gamma(α_n, rate=β_n)
- *   Predictive: Beta-prime / Lomax-like (closed form)
- * 
- * Key assumptions:
- *   - Shape parameter k is FIXED (not learned)
- *   - Rate parameter λ has Gamma prior (conjugate)
- *   - Parameterization uses RATE (not scale): higher rate → smaller values
- *   - Special case: k=1 reduces to Exponential(λ) likelihood
- * 
- * Sufficient statistics:
- *   - n: number of observations
- *   - sum_x: sum of observations
- * 
- * Posterior update (conjugate):
- *   α_n = α₀ + n·k
- *   β_n = β₀ + Σxᵢ
- * 
- * Use cases:
- *   - Positive continuous data (durations, amounts, inter-arrival times)
- *   - Waiting times / survival data (k=1 for Exponential)
- *   - Right-skewed distributions
- * 
- * Implementation notes:
- *   - Recommend shape >= 1 to avoid infinite density at x=0
- *   - For shape < 1, x=0 returns -inf (prevents BOCPD poisoning)
- *   - Cached lgamma(k) for efficiency
- *   - Numerically stable log-space computation with log1p
+/*
+ * Gamma-Gamma model (fixed shape, unknown rate).
+ *
+ * Likelihood: x ~ Gamma(k, lambda) with fixed k.
+ * Prior: lambda ~ Gamma(alpha0, beta0).
+ * Sufficient stats: count n and summed mass sum_x.
  */
 
 #ifndef GAMMA_GAMMA_FIXED_SHAPE_H
@@ -41,12 +12,6 @@
 #include <stddef.h>
 #include <stdint.h>
 
-/**
- * Parameters for Gamma-Gamma model.
- * 
- * Prior: λ ~ Gamma(α₀, rate=β₀)
- * Likelihood: x ~ Gamma(k, rate=λ) with k FIXED
- */
 typedef struct {
     double alpha0;        // Prior shape parameter on λ (must be > 0)
     double beta0;         // Prior rate parameter on λ (must be > 0, NOT scale!)
@@ -54,11 +19,6 @@ typedef struct {
     double log_gamma_k;   // Cached lgamma(shape) for efficiency
 } GammaGammaParams;
 
-/**
- * Sufficient statistics for Gamma-Gamma model.
- * 
- * Tracks count and sum of observations for O(1) updates.
- */
 typedef struct {
     int32_t n;      // Number of observations in this run
     double sum_x;   // Sum of observations

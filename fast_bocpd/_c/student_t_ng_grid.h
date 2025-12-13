@@ -1,4 +1,3 @@
-// filepath: /home/tiaan/Projects/Fast_BOCPD/fast_bocpd/_c/student_t_ng_grid.h
 #ifndef STUDENT_T_NG_GRID_H
 #define STUDENT_T_NG_GRID_H
 
@@ -59,8 +58,10 @@ typedef struct {
  * Helper: Align offset to alignment boundary (same as in .c)
  */
 static inline size_t grid_align_up(size_t offset, size_t alignment) {
-    if (alignment == 0) return offset;
-    return (offset + alignment - 1) & ~(alignment - 1);
+    if (alignment == 0) {
+        return offset;
+    }
+    return ((offset + alignment - 1) / alignment) * alignment;
 }
 
 /**

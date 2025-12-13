@@ -1,0 +1,11 @@
+# Documentation build requirements
+# These are needed to build the Sphinx documentation
+
+# Sphinx and extensions
+sphinx>=7.0.0
+sphinx-rtd-theme>=2.0.0
+sphinx-autodoc-typehints>=1.24.0
+myst-parser>=2.0.0
+
+# For importing fast_bocpd (to extract docstrings)
+numpy>=1.21.0

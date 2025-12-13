@@ -1,13 +1,73 @@
-// filepath: /home/tiaan/Projects/Fast_BOCPD/fast_bocpd/_c/poisson_gamma.c
-#include "poisson_gamma.h"
 #include <math.h>
 #include <string.h>
 
-size_t poisson_gamma_stats_size(void) {
+#include "poisson_gamma.h"
+
+#define POISSON_INT_TOL 1e-9
+
+// =============================================================================
+// == Validation Helpers =======================================================
+// =============================================================================
+
+static int validate_params(const PoissonGammaParams* params)
+{
+    if (!params) {
+        return -1;
+    }
+    if (!isfinite(params->alpha0) || params->alpha0 <= 0.0) {
+        return -1;
+    }
+    if (!isfinite(params->beta0) || params->beta0 <= 0.0) {
+        return -1;
+    }
+    return 0;
+}
+
+static int validate_stats(const PoissonGammaStats* stats)
+{
+    if (!stats) {
+        return -1;
+    }
+    if (stats->n < 0) {
+        return -1;
+    }
+    if (!isfinite(stats->sum_x) || stats->sum_x < 0.0) {
+        return -1;
+    }
+    return 0;
+}
+
+// Normalize/validate observation count using tolerance.
+static int to_valid_count(double x, int64_t* out)
+{
+    if (!isfinite(x) || x < 0.0) {
+        return -1;
+    }
+    
+    double rounded = nearbyint(x);
+    if (fabs(x - rounded) > POISSON_INT_TOL) {
+        return -1;
+    }
+    
+    if (rounded > (double)INT64_MAX) {
+        return -1;
+    }
+    
+    *out = (int64_t)rounded;
+    return 0;
+}
+
+// =============================================================================
+// == Public API ===============================================================
+// =============================================================================
+
+size_t poisson_gamma_stats_size(void)
+{
     return sizeof(PoissonGammaStats);
 }
 
-void poisson_gamma_prior_stats(PoissonGammaStats* stats) {
+void poisson_gamma_prior_stats(PoissonGammaStats* stats)
+{
     stats->n = 0;
     stats->sum_x = 0.0;
 }
@@ -15,9 +75,12 @@ void poisson_gamma_prior_stats(PoissonGammaStats* stats) {
 void poisson_gamma_update_stats(
     PoissonGammaStats* stats,
     const PoissonGammaParams* params,
-    double x
-) {
+    double x)
+{
     (void)params;  // Unused for this model
+    if (!stats) {
+        return;
+    }
     stats->n++;
     stats->sum_x += x;
 }
@@ -25,27 +88,17 @@ void poisson_gamma_update_stats(
 double poisson_gamma_predictive_logpdf(
     const PoissonGammaParams* params,
     const PoissonGammaStats* stats,
-    double x
-) {
-    // Guard against invalid inputs
-    if (!isfinite(x) || x < 0.0) {
+    double x)
+{
+    if (validate_params(params) != 0) {
         return -INFINITY;
     }
-    
-    // Guard against bad hyperparameters (cheap insurance)
-    if (!isfinite(params->alpha0) || !isfinite(params->beta0) ||
-        !(params->alpha0 > 0.0) || !(params->beta0 > 0.0)) {
+    if (validate_stats(stats) != 0) {
         return -INFINITY;
     }
-    
-    // Check integer-ness (tolerance 1e-9)
-    double xr = nearbyint(x);
-    if (fabs(x - xr) > 1e-9) {
-        return -INFINITY;
-    }
-    
-    // Clamp out-of-range integers
-    if (xr > (double)INT64_MAX) {
+
+    int64_t count = 0;
+    if (to_valid_count(x, &count) != 0) {
         return -INFINITY;
     }
     
@@ -66,17 +119,18 @@ double poisson_gamma_predictive_logpdf(
     
     // Stable log computations (avoid cancellation)
     double log_p_success = -log1p(1.0 / beta_n);  // log(β_n / (β_n + 1))
-    double log_p_fail = -log1p(beta_n);            // log(1 / (β_n + 1))
+    double log_p_fail = -log1p(beta_n);           // log(1 / (β_n + 1))
     
-    double logpdf = lgamma(alpha_n + xr) 
+    double logpdf = lgamma(alpha_n + (double)count)
                   - lgamma(alpha_n)
-                  - lgamma(xr + 1.0)  // No int overflow
+                  - lgamma((double)count + 1.0)
                   + alpha_n * log_p_success
-                  + xr * log_p_fail;
+                  + (double)count * log_p_fail;
     
     return logpdf;
 }
 
-void poisson_gamma_copy_stats(void* dst, const void* src) {
+void poisson_gamma_copy_stats(void* dst, const void* src)
+{
     memcpy(dst, src, sizeof(PoissonGammaStats));
 }

@@ -41,7 +41,7 @@ TEST_OBJS = $(patsubst $(TEST_DIR)/%.c,$(OBJ_DIR)/%.o,$(TEST_SRCS))
 LIB_TARGET = $(LIB_DIR)/libbocpd.so
 TEST_RUNNER = $(BUILD_DIR)/test_runner
 
-.PHONY: all lib test test-c test-python test-sanitizers test-valgrind benchmark clean help
+.PHONY: all lib test test-c test-python test-sanitizers test-valgrind benchmark clean help docs docs-open docs-clean
 
 # Default target
 all: help
@@ -113,6 +113,34 @@ test-valgrind: $(TEST_RUNNER)
 benchmark: 
 	cd benchmarks && ./benchmark.sh && cd ..
 
+# Build documentation
+docs:
+	@echo ""
+	@echo "========================================="
+	@echo "Building Documentation"
+	@echo "========================================="
+	@echo ""
+	cd docs && $(MAKE) html
+	@echo ""
+	@echo "✓ Documentation built successfully!"
+	@echo "  Open: docs/build/html/index.html"
+
+# Build and open documentation in browser
+docs-open: docs
+	@echo "Opening documentation in browser..."
+	@if command -v xdg-open > /dev/null; then \
+		xdg-open docs/build/html/index.html; \
+	elif command -v open > /dev/null; then \
+		open docs/build/html/index.html; \
+	else \
+		echo "Please open docs/build/html/index.html manually"; \
+	fi
+
+# Clean documentation build files
+docs-clean:
+	cd docs && $(MAKE) clean
+	@echo "✓ Documentation cleaned"
+
 # Clean all build artifacts
 clean:
 	rm -rf $(BUILD_DIR)
@@ -129,21 +157,33 @@ help:
 	@echo "Fast BOCPD Build System"
 	@echo "======================="
 	@echo ""
-	@echo "Targets:"
+	@echo "Build Targets:"
 	@echo "  make lib              Build shared library (for development)"
+	@echo ""
+	@echo "Testing:"
 	@echo "  make test             Run all tests (C + Python)"
 	@echo "  make test-c           Run C unit tests only"
 	@echo "  make test-python      Run Python tests only"
 	@echo "  make test-sanitizers  Run C tests with ASan/UBSan"
 	@echo "  make test-valgrind    Run C tests with Valgrind"
-	@echo "  make benchmark        Run benchmarks"
+	@echo ""
+	@echo "Documentation:"
+	@echo "  make docs             Build HTML documentation"
+	@echo "  make docs-open        Build docs and open in browser"
+	@echo "  make docs-clean       Clean documentation build files"
+	@echo ""
+	@echo "Benchmarking:"
+	@echo "  make benchmark        Run performance benchmarks"
+	@echo ""
+	@echo "Cleanup:"
 	@echo "  make clean            Remove all build artifacts"
 	@echo "  make help             Show this help message"
 	@echo ""
 	@echo "Development workflow:"
 	@echo "  1. Edit C code in fast_bocpd/_c/"
-	@echo "  2. make test      # Verify changes"
-	@echo "  3. pip install -e .  # For Python integration"
+	@echo "  2. make test          # Verify changes"
+	@echo "  3. pip install -e .   # For Python integration"
+	@echo "  4. make docs-open     # Update documentation"
 	@echo ""
 	@echo "Note: 'pip install' automatically compiles C code."
 	@echo "      'make lib' is only needed for manual testing."

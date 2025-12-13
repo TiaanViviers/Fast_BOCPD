@@ -1,13 +1,17 @@
-// filepath: /home/tiaan/Projects/Fast_BOCPD/fast_bocpd/_c/student_t_ng_grid.c
-#include "student_t_ng_grid.h"
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
-#include <math.h>
 
-/**
- * Numerically stable log-sum-exp for K values
- */
-static double logsumexp_k(const double* log_arr, int32_t K) {
+#include "student_t_ng_grid.h"
+
+#define GRID_STACK_K 64
+
+// =============================================================================
+// == Internal Helpers =========================================================
+// =============================================================================
+
+static double logsumexp_k(const double* log_arr, int32_t K)
+{
     // Find maximum
     double max_val = -INFINITY;
     for (int32_t k = 0; k < K; k++) {
@@ -29,18 +33,23 @@ static double logsumexp_k(const double* log_arr, int32_t K) {
     return max_val + log(sum);
 }
 
-/**
- * Helper: Align offset to alignment boundary
- */
-static inline size_t align_up(size_t offset, size_t alignment) {
-    if (alignment == 0) return offset;
-    return (offset + alignment - 1) & ~(alignment - 1);
+static inline size_t align_up(size_t offset, size_t alignment)
+{
+    if (alignment == 0) {
+        return offset;
+    }
+    return ((offset + alignment - 1) / alignment) * alignment;
 }
+
+// =============================================================================
+// == Public API ===============================================================
+// =============================================================================
 
 /**
  * Calculate stats blob size for K components
  */
-size_t student_t_ng_grid_stats_size(int32_t K) {
+size_t student_t_ng_grid_stats_size(int32_t K)
+{
     size_t size = 0;
     
     // int32_t K
@@ -68,7 +77,12 @@ size_t student_t_ng_grid_stats_size(int32_t K) {
 /**
  * Initialize stats blob with prior
  */
-void student_t_ng_grid_prior_stats(void* blob, const StudentTNGGridParams* params) {
+void student_t_ng_grid_prior_stats(void* blob, const StudentTNGGridParams* params)
+{
+    if (!blob || !params) {
+        return;
+    }
+
     int32_t K = params->K;
     
     // Store K (for debugging/validation)
@@ -110,13 +124,18 @@ double student_t_ng_grid_predictive_logpdf(
     const void* blob,
     const StudentTNGGridParams* params,
     double x
-) {
+)
+{
+    if (!blob || !params || !isfinite(x)) {
+        return -INFINITY;
+    }
+
     int32_t K = params->K;  // Use params->K as source of truth
     const double* log_pi = grid_blob_log_pi_const(blob);
     
     // Use stack buffer for small K, heap for large K
-    double log_terms_stack[64];
-    double* log_terms = (K <= 64) ? log_terms_stack : (double*)malloc(K * sizeof(double));
+    double log_terms_stack[GRID_STACK_K];
+    double* log_terms = (K <= GRID_STACK_K) ? log_terms_stack : (double*)malloc((size_t)K * sizeof(double));
     if (!log_terms) {
         return -INFINITY;  // Allocation failed
     }
@@ -141,7 +160,9 @@ double student_t_ng_grid_predictive_logpdf(
     // Mixture log-likelihood: logsumexp(log_terms)
     double result = logsumexp_k(log_terms, K);
     
-    if (K > 64) free(log_terms);
+    if (K > GRID_STACK_K) {
+        free(log_terms);
+    }
     return result;
 }
 
@@ -152,13 +173,18 @@ void student_t_ng_grid_update_stats(
     void* blob,
     const StudentTNGGridParams* params,
     double x
-) {
+)
+{
+    if (!blob || !params || !isfinite(x)) {
+        return;
+    }
+
     int32_t K = params->K;  // Use params->K as source of truth
     double* log_pi = grid_blob_log_pi(blob);
     
     // Use stack buffer for small K, heap for large K
-    double logp_k_stack[64];
-    double* logp_k = (K <= 64) ? logp_k_stack : (double*)malloc(K * sizeof(double));
+    double logp_k_stack[GRID_STACK_K];
+    double* logp_k = (K <= GRID_STACK_K) ? logp_k_stack : (double*)malloc((size_t)K * sizeof(double));
     if (!logp_k) {
         return;  // Allocation failed, leave stats unchanged
     }
@@ -219,7 +245,9 @@ void student_t_ng_grid_update_stats(
         student_t_ng_update_stats(stats_k, &params_k, x);
     }
     
-    if (K > 64) free(logp_k);
+    if (K > GRID_STACK_K) {
+        free(logp_k);
+    }
 }
 
 /**
@@ -229,7 +257,11 @@ void student_t_ng_grid_copy_stats(
     void* dst,
     const void* src,
     const StudentTNGGridParams* params
-) {
+)
+{
+    if (!dst || !src || !params) {
+        return;
+    }
     // Simply copy the entire blob
     size_t blob_size = student_t_ng_grid_stats_size(params->K);
     memcpy(dst, src, blob_size);
@@ -238,7 +270,8 @@ void student_t_ng_grid_copy_stats(
 /**
  * Validate grid parameters
  */
-int student_t_ng_grid_validate_params(const StudentTNGGridParams* params) {
+int student_t_ng_grid_validate_params(const StudentTNGGridParams* params)
+{
     if (params->K < 1) {
         return -1;
     }
@@ -278,7 +311,8 @@ int student_t_ng_grid_normalize_prior(
     const double* nu_prior,
     int32_t K,
     double* normalized
-) {
+)
+{
     double sum = 0.0;
     
     for (int32_t k = 0; k < K; k++) {

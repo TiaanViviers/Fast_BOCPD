@@ -1,12 +1,19 @@
-#include "bernoulli_beta.h"
 #include <math.h>
 #include <string.h>
 
-size_t bernoulli_beta_stats_size(void) {
+#include "bernoulli_beta.h"
+
+// =============================================================================
+// == Public API ===============================================================
+// =============================================================================
+
+size_t bernoulli_beta_stats_size(void)
+{
     return sizeof(BernoulliBetaStats);
 }
 
-void bernoulli_beta_prior_stats(BernoulliBetaStats* stats) {
+void bernoulli_beta_prior_stats(BernoulliBetaStats* stats)
+{
     stats->n = 0;
     stats->sum_x = 0.0;
 }
@@ -15,17 +22,24 @@ void bernoulli_beta_update_stats(
     BernoulliBetaStats* stats,
     const BernoulliBetaParams* params,
     double x
-) {
+)
+{
     (void)params;  // Unused
     stats->n++;
     stats->sum_x += x;
 }
 
+
 double bernoulli_beta_predictive_logpdf(
     const BernoulliBetaParams* params,
     const BernoulliBetaStats* stats,
     double x
-) {
+)
+{
+    if (!params || !stats) {
+        return -INFINITY;
+    }
+
 #ifdef BOCPD_DEBUG_CHECKS
     // Validate parameters (only in debug builds - checked in bocpd_init)
     if (!isfinite(params->alpha0) || !isfinite(params->beta0) ||
@@ -73,9 +87,9 @@ double bernoulli_beta_predictive_logpdf(
                        : (log(beta_n) - log_total);
 }
 
-void bernoulli_beta_copy_stats(BernoulliBetaStats* dst, 
-                               const BernoulliBetaStats* src
-                              )
+
+void bernoulli_beta_copy_stats(BernoulliBetaStats* dst,
+                               const BernoulliBetaStats* src)
 {
     memcpy(dst, src, sizeof(BernoulliBetaStats));
 }

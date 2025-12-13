@@ -7,14 +7,16 @@ The actual implementation is in C, these are just Python wrappers for validation
 
 class ConstantHazard:
     """
-    Constant hazard function: H = 1 / lambda_.
+    Constant hazard function: H = 1 / lambda\_.
 
     At each time step, independent of the current run length r:
         P(changepoint)  = H
         P(continuation) = 1 - H
     
-    Args:
-        lambda_: Expected run length (must be > 0)
+    Parameters
+    ----------
+    lambda_ : float
+        Expected run length (must be > 0)
     """
     def __init__(self, lambda_: float):
         if lambda_ <= 0:

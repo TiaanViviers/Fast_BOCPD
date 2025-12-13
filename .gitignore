@@ -3,10 +3,16 @@ __pycache__/
 *.py[codz]
 *$py.class
 .vscode/
+
+# Documentation build files (Sphinx)
+docs/build/
+docs/_build/
+docs/source/_build/
+
 # Data files
 *.csv
-*.txt
 *.npy
+TODO.txt
 ROADMAP_TO_V1.md
 
 # Competitor libraries (cloned for benchmarking, not part of our repo)

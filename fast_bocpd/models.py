@@ -53,15 +53,19 @@ class StudentTNG:
             - nu → ∞: Approaches Gaussian
         nu_prior: Prior weights over nu_grid (optional, defaults to uniform)
     
-    Examples:
-        # Fixed ν (standard Student-t)
+    Examples
+    --------
+    Fixed ν (standard Student-t)::
+    
         >>> model = StudentTNG(mu0=0, kappa0=1, alpha0=1, beta0=1, nu=3.0)
-        
-        # Grid ν (infer best ν from data)
+    
+    Grid ν (infer best ν from data)::
+    
         >>> model = StudentTNG(mu0=0, kappa0=1, alpha0=1, beta0=1,
         ...                    nu=[2, 3, 5, 10, 20])
-        
-        # Grid ν with custom prior
+    
+    Grid ν with custom prior::
+    
         >>> model = StudentTNG(mu0=0, kappa0=1, alpha0=1, beta0=1,
         ...                    nu=[2, 3, 5], nu_prior=[0.2, 0.5, 0.3])
     """

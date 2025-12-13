@@ -1,10 +1,18 @@
-#include "hazard.h"
 #include <math.h>
 
-int constant_hazard_init(ConstantHazardParams* params, double lambda) 
+#include "hazard.h"
+
+// =============================================================================
+// == Public API ===============================================================
+// =============================================================================
+
+int constant_hazard_init(ConstantHazardParams* params, double lambda)
 {
-    if (lambda <= 0.0) {
-        return -1;  // Invalid lambda
+    if (!params) {
+        return -1;
+    }
+    if (!isfinite(lambda) || lambda <= 0.0) {
+        return -1;
     }
 
     params->lambda = lambda;
@@ -22,16 +30,18 @@ int constant_hazard_init(ConstantHazardParams* params, double lambda)
 
 double constant_hazard_log_transition_cp(const ConstantHazardParams* params, int32_t r_prev)
 {
-    // For constant hazard, changepoint probability is always log(H)
-    // r_prev is unused
-    (void)r_prev;  // Suppress unused parameter warning
+    (void)r_prev;
+    if (!params) {
+        return -INFINITY;
+    }
     return params->log_H;
 }
 
 double constant_hazard_log_transition_cont(const ConstantHazardParams* params, int32_t r_prev)
 {
-    // For constant hazard, continuation probability is always log(1 - H)
-    // r_prev is unused
-    (void)r_prev;  // Suppress unused parameter warning
+    (void)r_prev;
+    if (!params) {
+        return -INFINITY;
+    }
     return params->log_1mH;
 }

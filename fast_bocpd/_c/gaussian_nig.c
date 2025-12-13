@@ -1,11 +1,57 @@
-#include "gaussian_nig.h"
 #include <math.h>
+
+#include "gaussian_nig.h"
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
 
-void gaussian_nig_prior_stats(GaussianNIGStats* stats) 
+// =============================================================================
+// == Validation Helpers =======================================================
+// =============================================================================
+
+static int gaussian_nig_validate_params(const GaussianNIGParams* params)
+{
+    if (!params) {
+        return -1;
+    }
+    if (!isfinite(params->kappa0) || params->kappa0 <= 0.0) {
+        return -1;
+    }
+    if (!isfinite(params->alpha0) || params->alpha0 <= 0.0) {
+        return -1;
+    }
+    if (!isfinite(params->beta0) || params->beta0 <= 0.0) {
+        return -1;
+    }
+    if (!isfinite(params->mu0)) {
+        return -1;
+    }
+    return 0;
+}
+
+static int gaussian_nig_validate_stats(const GaussianNIGStats* stats)
+{
+    if (!stats) {
+        return -1;
+    }
+    if (stats->n < 0) {
+        return -1;
+    }
+    if (!isfinite(stats->sum_x) || !isfinite(stats->sum_x2)) {
+        return -1;
+    }
+    if (stats->sum_x2 < 0.0) {
+        return -1;
+    }
+    return 0;
+}
+
+// =============================================================================
+// == Public API ===============================================================
+// =============================================================================
+
+void gaussian_nig_prior_stats(GaussianNIGStats* stats)
 {
     stats->n = 0;
     stats->sum_x = 0.0;
@@ -14,17 +60,21 @@ void gaussian_nig_prior_stats(GaussianNIGStats* stats)
 
 void gaussian_nig_update_stats(GaussianNIGStats* stats, double x)
 {
+    if (!stats) {
+        return;
+    }
     stats->n += 1;
     stats->sum_x += x;
     stats->sum_x2 += x * x;
 }
 
-/**
- * Compute posterior hyperparameters given sufficient statistics
- */
 static void compute_posterior_hyperparams(
-    const GaussianNIGParams* params, const GaussianNIGStats* stats,
-    double* mu_n, double* kappa_n, double* alpha_n, double* beta_n) 
+    const GaussianNIGParams* params,
+    const GaussianNIGStats* stats,
+    double* mu_n,
+    double* kappa_n,
+    double* alpha_n,
+    double* beta_n)
 {
     if (stats->n == 0) {
         // No data yet: posterior == prior
@@ -51,8 +101,20 @@ static void compute_posterior_hyperparams(
 }
 
 double gaussian_nig_predictive_logpdf(
-    const GaussianNIGParams* params, const GaussianNIGStats* stats,double x) 
+    const GaussianNIGParams* params,
+    const GaussianNIGStats* stats,
+    double x)
 {
+    if (gaussian_nig_validate_params(params) != 0) {
+        return -INFINITY;
+    }
+    if (gaussian_nig_validate_stats(stats) != 0) {
+        return -INFINITY;
+    }
+    if (!isfinite(x)) {
+        return -INFINITY;
+    }
+
     // Compute posterior hyperparameters
     double mu_n, kappa_n, alpha_n, beta_n;
     compute_posterior_hyperparams(params, stats, &mu_n, &kappa_n, &alpha_n, &beta_n);
@@ -60,6 +122,14 @@ double gaussian_nig_predictive_logpdf(
     // Student-t parameters
     double nu = 2.0 * alpha_n;  // degrees of freedom
     double scale2 = beta_n * (kappa_n + 1.0) / (alpha_n * kappa_n);
+
+    if (!isfinite(nu) || nu <= 0.0) {
+        return -INFINITY;
+    }
+    if (!isfinite(scale2) || scale2 <= 0.0) {
+        return -INFINITY;
+    }
+
     double scale = sqrt(scale2);
 
     double z = (x - mu_n) / scale;
@@ -71,7 +141,7 @@ double gaussian_nig_predictive_logpdf(
                     - 0.5 * log(nu * M_PI)
                     - log(scale);
     
-    double log_kernel = -(nu + 1.0) / 2.0 * log(1.0 + (z * z) / nu);
+    double log_kernel = -(nu + 1.0) / 2.0 * log1p((z * z) / nu);
 
     return log_norm + log_kernel;
 }
