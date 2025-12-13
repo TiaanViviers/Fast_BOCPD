@@ -446,8 +446,8 @@ implementation of this benchmarking please see
 
 | Size | Mode | Median (s) | Throughput | CV% |
 |------|------|------------|------------|-----|
-| 1k | Online | 58.1504 | 17 obs/s | 0.2% |
-| 1k | Offline | 340.0730 | 3 obs/s | 0.1% |
+| 1k | Online | 317.39 | 3 obs/s | 0.3% |
+| 1k | Offline | 1808.03 | 1 obs/s | 0.5% |
 
 **Larger sizes:** Not benchmarked due to quadratic complexity (estimated 100 minutes for 10k, 169 hours for 100k).
 
