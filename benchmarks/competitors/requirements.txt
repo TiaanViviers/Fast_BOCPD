@@ -1,20 +1,49 @@
 # Competitor libraries for benchmarking Fast-BOCPD
 # Install with: pip install -r requirements.txt
+#
+# NOTE: Some libraries require manual cloning (see below)
+
+# ============================================================================
+# PIP-INSTALLABLE COMPETITORS
+# ============================================================================
 
 # ruptures - Offline changepoint detection library (Python/Cython/C)
 # Repository: https://github.com/deepcharles/ruptures
-# Model: Gaussian (CostNormal), detects mean/variance changes
 ruptures>=1.1.0
 
-# bayesian-changepoint-detection - PyTorch-based BOCPD (Hildensia/estcarisimo)
-# Repository: https://github.com/hildensia/bayesian_changepoint_detection
-# Model: Student-t (same as GaussianNIG predictive), online and offline modes
-# Note: Automatically installs PyTorch and dependencies
-bayesian-changepoint-detection>=1.0.0
+# promised-ai/changepoint - Rust-based BOCPD with Python bindings
+# Repository: https://github.com/promised-ai/changepoint
+changepoint>=0.4.0
 
-# Dependencies for dtolpin/bocd (manually cloned)
-# Repository: https://github.com/dtolpin/bocd (clone separately)
-# The dtolpin/bocd library itself must be cloned manually:
-#   git clone https://github.com/dtolpin/bocd.git dtolpin_bocd
+# ============================================================================
+# MANUALLY CLONED COMPETITORS (Git clone required)
+# ============================================================================
+# The following libraries must be manually cloned into this directory:
+#
+# 1. dtolpin/bocd - Pure Python BOCPD reference implementation
+#    Repository: https://github.com/dtolpin/bocd
+#    Clone command:
+#      cd benchmarks/competitors
+#      git clone https://github.com/dtolpin/bocd.git dtolpin_bocd
+#
+# 2. hildensia/bayesian_changepoint_detection - PyTorch-based BOCPD
+#    Repository: https://github.com/hildensia/bayesian_changepoint_detection
+#    Clone command:
+#      cd benchmarks/competitors
+#      git clone https://github.com/hildensia/bayesian_changepoint_detection.git
+#      cd bayesian_changepoint_detection
+#      pip install -e .
+#
+# Note: The PyPI version of hildensia is outdated (v0.4) with scipy compatibility
+# issues. Always use the GitHub version.
+
+# ============================================================================
+# SHARED DEPENDENCIES
+# ============================================================================
+# Core scientific computing (required by dtolpin and others)
 numpy>=1.21.0
 scipy>=1.7.0
+
+# PyTorch (required by hildensia, ~4GB download)
+# Only install if benchmarking hildensia
+# torch>=2.0.0

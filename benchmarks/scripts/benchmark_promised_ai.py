@@ -3,7 +3,7 @@ Benchmark module for promised-ai/changepoint library.
 
 Repository: https://github.com/promised-ai/changepoint
 Installation: pip install changepoint
-Type: Rust-based implementation with Python bindings (fast!)
+Type: Rust-based implementation with Python bindings
 
 This module benchmarks the Rust-based changepoint library against Fast-BOCPD.
 It supports online-only changepoint detection with multiple conjugate priors.
@@ -104,10 +104,9 @@ def _run_online(data: np.ndarray, prior, lambda_: float) -> float:
     # Time the online processing
     start = time.perf_counter()
     
-    # Process each datum sequentially (online)
+    # Process online
     for x in data:
-        run_length_probs = cpd.step(x)  # Returns list of run length probabilities
-    
+        run_length_probs = cpd.step(x)
     elapsed = time.perf_counter() - start
     
     return elapsed

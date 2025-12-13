@@ -1,3 +1,64 @@
+"""
+Benchmarking script for Fast-BOCPD internal performance evaluation.
+
+This module provides comprehensive performance benchmarking for all Fast-BOCPD
+models across multiple dataset sizes. It measures both online (sequential) and
+offline (batch) processing modes, tracking median runtime, throughput, and
+statistical stability.
+
+Purpose
+-------
+1. Track iterative performance improvements across development versions
+2. Validate O(n) scaling behavior for all models
+3. Quantify batch processing speedup (offline vs online mode)
+4. Ensure consistent, predictable performance (low CV%)
+
+Usage
+-----
+Benchmark a specific distribution:
+    python benchmark_fast_bocpd.py --distribution gaussian --runs 10
+    
+Benchmark all sizes for a distribution:
+    python benchmark_fast_bocpd.py --distribution student_t_fixed
+    
+Benchmark specific size only:
+    python benchmark_fast_bocpd.py --distribution poisson --size 10000
+
+Or use the convenience wrapper:
+    ../../benchmark.sh gaussian
+    ../../benchmark.sh Fbocpd  # All distributions
+
+Supported Distributions
+-----------------------
+- gaussian: GaussianNIG (Normal-Inverse-Gamma prior)
+- student_t_fixed: StudentTNG with fixed degrees of freedom
+- student_t_grid: StudentTNG with grid search over degrees of freedom
+- bernoulli: BernoulliBeta for binary data
+- binomial: BinomialBeta for proportion data
+- poisson: PoissonGamma for count data
+- gamma: GammaGamma for positive continuous data
+
+Output Metrics
+--------------
+- Median runtime (s): Typical execution time (robust to outliers)
+- Throughput (obs/sec): Processing speed
+- CV%: Coefficient of variation (std/mean × 100), measures stability
+- Batch speedup: Offline vs online performance ratio
+
+Notes
+-----
+- All benchmarks use λ=150 (expected run length)
+- Datasets are pre-generated in ../data/
+- Results are logged in ../Benchmark_tracking.md for version comparison
+- Low CV% (<2%) indicates consistent, predictable performance
+
+See Also
+--------
+benchmark_competitors.py : Benchmark against other libraries
+generate_data.py : Generate synthetic benchmark datasets
+../README.md : Full benchmarking methodology and results
+"""
+
 import sys
 import argparse
 from pathlib import Path
@@ -171,7 +232,6 @@ def print_results(online_results, batch_results, dataset_name):
         mode = results['mode'].capitalize()
         print(f"  {mode:<10} {results['median']:>9.4f}s {results['throughput']:>13,.0f}/s {results['cv_percent']:>5.1f}%")
     
-    # Speedup
     speedup = online_results['median'] / batch_results['median']
     print(f"  Batch speedup: {speedup:.2f}x")
 

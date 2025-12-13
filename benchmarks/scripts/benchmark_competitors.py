@@ -1,18 +1,91 @@
+"""
+Benchmarking script for competitor library performance evaluation.
+
+This module provides comprehensive performance benchmarking for competing
+Bayesian online changepoint detection (BOCPD) implementations. It enables
+fair, apples-to-apples comparison with Fast-BOCPD across multiple dataset
+sizes and processing modes.
+
+Purpose
+-------
+1. Quantify Fast-BOCPD's performance advantage over existing libraries
+2. Validate scalability claims (O(n) vs O(n²) complexity)
+3. Guide users on when to use Fast-BOCPD vs alternatives
+4. Ensure reproducible, verifiable benchmark results
+
+Usage
+-----
+Benchmark all competitors:
+    python benchmark_competitors.py --runs 10
+    
+Benchmark specific competitor:
+    python benchmark_competitors.py --lib ruptures --runs 10
+    python benchmark_competitors.py --lib hildensia --device cuda
+    
+Benchmark specific size only:
+    python benchmark_competitors.py --lib promised-ai --size 10000
+
+Or use the convenience wrapper:
+    ../../benchmark.sh competitors
+
+Competitor Libraries
+--------------------
+1. **dtolpin/bocd** (Pure Python, online-only)
+   - Repository: github.com/dtolpin/bocd
+   - Distribution: Student-t only
+   - Notes: Research implementation, not optimized for production
+
+2. **ruptures** (Cython/C, offline-only)
+   - Repository: github.com/deepcharles/ruptures
+   - Distribution: Gaussian CostNormal
+   - Notes: Well-optimized, but offline-only algorithm
+
+3. **hildensia/bayesian_changepoint_detection** (PyTorch)
+   - Repository: github.com/hildensia/bayesian_changepoint_detection
+   - Distribution: Gaussian/predictive-Student-t via PyTorch backend
+   - Notes: GPU-accelerated but quadratic complexity dominates
+   - Limitation: No run-length truncation causes severe scaling issues
+
+4. **promised-ai/changepoint** (Rust, online-only)
+   - Repository: github.com/promised-ai/changepoint
+   - Distributions: Gaussian, Bernoulli, Poisson and more
+
+Output Metrics
+--------------
+- Median runtime (s): Typical execution time
+- Throughput (obs/sec): Processing speed
+- CV%: Coefficient of variation (stability measure)
+- Mode: Online (sequential) vs Offline (batch)
+- Device: CPU or CUDA (Hildensia only)
+
+Installation
+------------
+See ../competitors/requirements.txt for setup instructions.
+Some libraries require manual git clone (dtolpin, hildensia).
+
+Notes
+-----
+- All benchmarks use λ=150 (expected run length) for fair comparison
+- Datasets are identical across all libraries (pre-generated in ../data/)
+- Results are logged in ../README.md Section 4
+- Hildensia limited to n≤1000 due to O(n²) memory/compute explosion
+
+See Also
+--------
+benchmark_fast_bocpd.py : Internal Fast-BOCPD benchmarks
+../README.md : Full competitor analysis and methodology
+../competitors/requirements.txt : Installation instructions
+"""
+
 import argparse
 import numpy as np
 from pathlib import Path
 
-#from benchmark_dtolpin_bocd import benchmark_dtolpin_bocd
-#from benchmark_ruptures import benchmark_ruptures
+from benchmark_dtolpin_bocd import benchmark_dtolpin_bocd
+from benchmark_ruptures import benchmark_ruptures
 from benchmark_hildensia import benchmark_hildensia
-#from benchmark_promised_ai import benchmark_promised_ai
+from benchmark_promised_ai import benchmark_promised_ai
 
-def benchmark_promised_ai(data, distribution, lambda_, runs, warmup):
-    pass
-def bechmark_dtolpin_bocd(data):
-    pass
-def benchmark_ruptures(data, distribution, mode, lambda_, runs, warmup):
-    pass
 
 def main():
     args = parse_args()
@@ -112,9 +185,8 @@ def run_hildensia_benchmark(args):
         
         results[name] = {}
         
-        # Run online mode: CPU-only for n <= 1000, GPU for all sizes
         if n_obs > 1000:
-            print(f"Skipping Hildensia for n={name} (O(n²) complexity, would take ~{(n_obs/100)**2 * 0.6/60:.1f} minutes)")
+            print(f"Skipping Hildensia for n={name} would take ~{(n_obs/100)**2 * 0.6/60:.1f} minutes)")
             results[name]['online'] = None
         else:
             print(f"Running Hildensia online mode for n={name} on {device}...")
@@ -157,8 +229,7 @@ def run_promised_ai_benchmark(args):
         - Bernoulli (BetaBernoulli prior)
         - Poisson (PoissonGamma prior)
     """
-    # Only benchmark distributions that promised-ai actually supports
-    # Don't try to fit Gaussian models to Student-t data - that's unfair!
+    # Only benchmark distributions that promised-ai supports
     supported_distributions = ['gaussian', 'bernoulli', 'poisson']
     
     results = {}
@@ -175,7 +246,7 @@ def run_promised_ai_benchmark(args):
             
             online_results = benchmark_promised_ai(
                 data,
-                distribution=distribution,  # Use distribution name directly
+                distribution=distribution,
                 lambda_=args.lambda_,
                 runs=args.runs,
                 warmup=args.warmup_runs
@@ -244,10 +315,9 @@ def print_summary(all_results):
     print(f"{'Dataset':<30} {'Mode':<10} {'Median (s)':>12} {'Throughput':>15} {'CV%':>8}")
     print(f"{'-'*95}")
     
-    # Sort by size (extract n_obs from first available mode)
+    # Sort by size
     def get_n_obs(size_key):
         result = all_results[size_key]
-        # Handle None values for skipped benchmarks
         if result.get('online') is not None:
             return result['online']['n_obs']
         elif result.get('offline') is not None:

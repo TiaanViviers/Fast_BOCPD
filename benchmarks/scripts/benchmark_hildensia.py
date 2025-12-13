@@ -11,9 +11,8 @@ This module supports both CPU and GPU benchmarking with proper CUDA synchronizat
 import time
 import numpy as np
 from functools import partial
-
-# Import bayesian_changepoint_detection library
 import torch
+
 from bayesian_changepoint_detection import (
     online_changepoint_detection,
     offline_changepoint_detection,
@@ -55,14 +54,11 @@ def benchmark_hildensia(
             - 'throughput': Observations per second
             - 'device': Device used for computation
     """
-    # Validate inputs
     if distribution != "gaussian":
         raise ValueError(f"Distribution '{distribution}' not supported. Only 'gaussian' is available.")
-    
     if mode not in ["online", "offline"]:
         raise ValueError(f"Mode must be 'online' or 'offline', got '{mode}'")
     
-    # Validate and setup device
     if device == "cuda" and not torch.cuda.is_available():
         print(f"WARNING: CUDA requested but not available. Falling back to CPU.")
         device = "cpu"
@@ -83,8 +79,6 @@ def benchmark_hildensia(
     
     # Convert data to PyTorch tensor and move to device
     data_tensor = torch.from_numpy(data).float().to(torch_device)
-    
-    # Student-T hyperparameters (matching Fast-BOCPD's GaussianNIG predictive)
     alpha = 1.0   # Shape parameter
     beta = 1.0    # Scale parameter
     kappa = 1.0   # Precision parameter
@@ -110,7 +104,6 @@ def benchmark_hildensia(
             elapsed = _run_offline(data_tensor, lambda_, alpha, beta, kappa, mu, torch_device, device_str)
         times.append(elapsed)
     
-    # Calculate statistics
     return _compute_stats(times, n, mode, device_str)
 
 
@@ -127,23 +120,19 @@ def _run_online(data: torch.Tensor, lambda_: float, alpha: float, beta: float,
         device: torch.device for synchronization
         device_str: "cpu" or "cuda" string for library API
     """
-    # Create hazard function (constant hazard with expected run length lambda_)
+    # Create constant hazard with expected run length lambda_
     hazard_func = partial(constant_hazard, lambda_)
-    
-    # Create likelihood model - pass string to library API
+    # Create likelihood model
     likelihood = OnlineStudentT(alpha=alpha, beta=beta, kappa=kappa, mu=mu, device=device_str)
-    
-    # Synchronize before timing (critical for GPU)
+    # Synchronize before timing
     if device.type == 'cuda':
         torch.cuda.synchronize()
-    
-    # Time the execution - pass string to library API
+    # Time the execution
     start = time.perf_counter()
     run_length_probs, changepoint_probs = online_changepoint_detection(
         data, hazard_func, likelihood, device=device_str
     )
-    
-    # Synchronize after computation (critical for GPU)
+    # Synchronize after computation
     if device.type == 'cuda':
         torch.cuda.synchronize()
     
@@ -167,23 +156,19 @@ def _run_offline(data: torch.Tensor, lambda_: float, alpha: float, beta: float,
     """
     n = len(data)
     
-    # Create prior function (constant prior)
+    # Create prior function
     prior_func = partial(const_prior, p=1/(n+1))
-    
-    # Create likelihood model - pass string to library API
+    # Create likelihood model
     likelihood = OfflineStudentT(device=device_str)
-    
-    # Synchronize before timing (critical for GPU)
+    # Synchronize before timing
     if device.type == 'cuda':
         torch.cuda.synchronize()
-    
-    # Time the execution - pass device_str to library API
+    # Time the execution
     start = time.perf_counter()
     Q, P, changepoint_log_probs = offline_changepoint_detection(
         data, prior_func, likelihood, device=device_str
     )
-    
-    # Synchronize after computation (critical for GPU)
+    # Synchronize after computation
     if device.type == 'cuda':
         torch.cuda.synchronize()
     

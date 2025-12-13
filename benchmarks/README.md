@@ -61,6 +61,7 @@ performance.
 ├── benchmark.sh                      # Main benchmarking runner
 ├── Benchmark_tracking.md             # Log of past and current performance
 ├── competitors
+│   ├── bayesian_changepoint_detection/  #Competitor library, needs git clone
 │   ├── dtolpin_bocd/                 # Competitor library, needs git clone
 │   │   
 │   └── requirements.txt              # Installation instructions for competitors
@@ -72,8 +73,11 @@ performance.
     ├── benchmark_competitors.py      # Main competitor benchmarking script
     ├── benchmark_dtolpin_bocd.py     # Benchmarking for dtolpin's library
     ├── benchmark_fast_bocpd.py       # Main benchmarking script for our library
+    ├── benchmark_hildensia.py        # Benchmarking for hildensia's library
+    ├── benchmark_promised_ai.py      # Benchmarking for promised-ai's library
     ├── benchmark_ruptures.py         # Benchmarking for ruptures library
     ├── generate_data.py              # Data generation script
+    ├── hildensia_gpu_gcolab.ipynb    # Notebook used for google colab gpu test
 ```
 
 ---
@@ -162,6 +166,9 @@ This section presents the **current performance** of all Fast-BOCPD models. All 
 - **Dataset sizes**: 1,000 / 10,000 / 100,000 observations
 
 For historical performance tracking and optimization notes, see [`Benchmark_tracking.md`](Benchmark_tracking.md).
+
+**Important Note:** All benchmarks work only recorded on my work station.
+Results will differ based on machine but should remain proportional.
 
 ### 3.1 Performance Summary
 
@@ -429,6 +436,13 @@ implementation of this benchmarking please see
 - **O(n²) complexity** due to maintaining full run-length distributions without truncation
 
 **Performance (CPU only, n=1k):**
+
+| Size | Mode | Median (s) | Throughput | CV% |
+|------|------|------------|------------|-----|
+| 1k | Online | 58.1504 | 17 obs/s | 0.2% |
+| 1k | Offline | 340.0730 | 3 obs/s | 0.1% |
+
+**Performance (T4 GPU only, n=1k):**
 
 | Size | Mode | Median (s) | Throughput | CV% |
 |------|------|------------|------------|-----|

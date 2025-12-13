@@ -19,7 +19,6 @@ from pathlib import Path
 DTOLPIN_PATH = Path(__file__).parent.parent / "competitors" / "dtolpin_bocd"
 sys.path.insert(0, str(DTOLPIN_PATH))
 
-# Import bocd library
 from bocd.bocd import BOCD, constant_hazard, StudentT
 
 
@@ -46,7 +45,6 @@ def benchmark_dtolpin_bocd(data: np.ndarray, distribution: str = "student_t",
             - 'cv_percent': Coefficient of variation (%)
             - 'throughput': Observations per second
     """
-    # Validate inputs
     if distribution != "student_t":
         raise ValueError(f"Distribution '{distribution}' not supported. Only 'student_t' is available.")
     
@@ -55,7 +53,6 @@ def benchmark_dtolpin_bocd(data: np.ndarray, distribution: str = "student_t",
     
     n = len(data)
     
-    # Set up model parameters (match Fast-BOCPD defaults)
     alpha = 1.0   # alpha0 in StudentTNG
     beta = 1.0    # beta0 in StudentTNG  
     kappa = 1.0   # kappa0 in StudentTNG
@@ -71,7 +68,6 @@ def benchmark_dtolpin_bocd(data: np.ndarray, distribution: str = "student_t",
         elapsed = _run_online(data, lambda_, alpha, beta, kappa, mu)
         times.append(elapsed)
     
-    # Calculate statistics
     return _compute_stats(times, n, mode="online")
 
 

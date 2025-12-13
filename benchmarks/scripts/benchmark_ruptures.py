@@ -44,7 +44,6 @@ def benchmark_ruptures(
             - 'cv_percent': Coefficient of variation (%)
             - 'throughput': Observations per second
     """
-    # Validate inputs
     if distribution != "gaussian":
         raise ValueError(f"Distribution '{distribution}' not supported. Only 'gaussian' is available.")
     
@@ -69,13 +68,12 @@ def benchmark_ruptures(
         elapsed = _run_offline(data, pen)
         times.append(elapsed)
     
-    # Calculate statistics
     return _compute_stats(times, n, mode="offline")
 
 
 def _run_offline(data: np.ndarray, pen: float) -> float:
     """Execute a single offline ruptures run and return elapsed time."""
-    # Reshape data if needed (ruptures expects 2D: n_samples x n_dims)
+    # Reshape data if needed
     if data.ndim == 1:
         signal = data.reshape(-1, 1)
     else:
