@@ -16,24 +16,24 @@ Fast-BOCPD is 10-1,500x faster than competing implementations while providing a 
 Key Features
 ------------
 
-🚀 **Blazing Fast**
+**Blazing Fast**
    - 14,000-43,000 observations/sec (depending on model)
    - 10x faster than optimized Cython implementations
    - 28x faster than Rust implementations
    - 1,500x faster than PyTorch implementations
 
-📊 **7 Probabilistic Models**
+**7 Probabilistic Models**
    - Gaussian, Student-t (outlier-robust)
    - Poisson (count data), Bernoulli/Binomial (binary/proportion data)
    - Gamma (positive continuous data)
    - All with conjugate priors for analytical updates
 
-🔄 **Flexible Processing**
+**Flexible Processing**
    - Online mode: Process data as it arrives (streaming)
    - Offline mode: Batch processing with 2-3x speedup
    - Smart truncation prevents O(n²) memory explosion
 
-🐍 **Pure Python Interface**
+**Pure Python Interface**
    - Intuitive API that "just works"
    - High-performance C backend (transparent to users)
    - Full NumPy integration

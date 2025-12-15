@@ -33,39 +33,48 @@ class GaussianNIG:
 
 
 class StudentTNG:
-    """
-    Student-t likelihood with Normal-Gamma conjugate prior.
-    
-    More robust to outliers than Gaussian.
-    
-    Supports two modes:
-    1. Fixed ν: Pass a single value (standard Student-t)
-    2. Grid ν: Pass nu_grid and optional nu_prior for ν inference
-    
-    Prior hyperparameters:
-        mu0: Prior mean
-        kappa0: Prior precision scaling (must be > 0)
-        alpha0: Prior shape parameter (must be > 0)
-        beta0: Prior rate parameter (must be > 0)
-        nu: Degrees of freedom (single value OR array for grid)
-            - nu = 1: Cauchy distribution (very heavy tails)
-            - nu = 3-5: Good for financial data
-            - nu → ∞: Approaches Gaussian
-        nu_prior: Prior weights over nu_grid (optional, defaults to uniform)
-    
+    r"""
+    Student-t observation model with Normal-Gamma prior.
+
+    This model is more robust to outliers than Gaussian-NIG. Two modes are
+    supported:
+
+    * **Fixed :math:`\nu`** – pass a scalar ``nu`` (standard Student-t).
+    * **Grid :math:`\nu`** – pass ``nu`` as a list/array and optionally
+      ``nu_prior`` to place a discrete prior over different degrees of
+      freedom.
+
+    Parameters
+    ----------
+    mu0 : float
+        Prior mean.
+    kappa0 : float
+        Prior precision scaling (> 0).
+    alpha0 : float
+        Prior shape parameter (> 0).
+    beta0 : float
+        Prior rate parameter (> 0).
+    nu : float or array-like, optional
+        Degrees of freedom. When ``nu`` is an array we infer the best value
+        online via a grid mixture. ``nu = 1`` behaves like Cauchy, ``nu``
+        in [3, 5] is often used for financial data, and
+        :math:`\nu \to \infty` approaches Gaussian.
+    nu_prior : array-like, optional
+        Prior weights over ``nu`` (grid mode). Defaults to uniform weights.
+
     Examples
     --------
-    Fixed ν (standard Student-t)::
-    
+    Fixed ν::
+
         >>> model = StudentTNG(mu0=0, kappa0=1, alpha0=1, beta0=1, nu=3.0)
-    
-    Grid ν (infer best ν from data)::
-    
+
+    Grid ν::
+
         >>> model = StudentTNG(mu0=0, kappa0=1, alpha0=1, beta0=1,
         ...                    nu=[2, 3, 5, 10, 20])
-    
+
     Grid ν with custom prior::
-    
+
         >>> model = StudentTNG(mu0=0, kappa0=1, alpha0=1, beta0=1,
         ...                    nu=[2, 3, 5], nu_prior=[0.2, 0.5, 0.3])
     """
@@ -726,5 +735,4 @@ class GammaGamma:
                 raise ValueError("Gamma data must be non-negative")
         
         return np.ascontiguousarray(data, dtype=np.float64)
-
 

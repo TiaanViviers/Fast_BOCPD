@@ -10,7 +10,7 @@ from pathlib import Path
 def _load_library():
     """Try to load the compiled C library"""
     
-    # Try 1: Extension module built by setuptools (pip install)
+    # Extension module built by setuptools (pip install)
     try:
         # This will be at fast_bocpd/_core.*.so (e.g., _core.cpython-39-x86_64-linux-gnu.so)
         import importlib.util
@@ -20,7 +20,7 @@ def _load_library():
     except (ImportError, OSError):
         pass
     
-    # Try 2: Built with root Makefile (development mode)
+    # Built with root Makefile (development mode)
     _ROOT_DIR = Path(__file__).parent.parent
     lib_path = _ROOT_DIR / "build" / "lib" / "libbocpd.so"
     if lib_path.exists():
@@ -29,7 +29,7 @@ def _load_library():
         except OSError:
             pass
     
-    # Try 3: Manually built shared library (legacy)
+    # Manually built shared library (legacy)
     _LIB_DIR = Path(__file__).parent / "_c"
     _LIB_NAME = "libbocpd"
     for ext in ['.so', '.dylib', '.dll']:
@@ -178,16 +178,16 @@ class HazardParams(ctypes.Union):
 class ObsModelVTable(ctypes.Structure):
     """Matches ObsModelVTable in C"""
     _fields_ = [
-        ("stats_size", ctypes.c_void_p),         # function pointer
-        ("prior_stats", ctypes.c_void_p),        # function pointer
-        ("update_stats", ctypes.c_void_p),       # function pointer
-        ("predictive_logpdf", ctypes.c_void_p),  # function pointer
-        ("copy_stats", ctypes.c_void_p),         # function pointer
+        ("stats_size", ctypes.c_void_p),         # function pointers
+        ("prior_stats", ctypes.c_void_p),
+        ("update_stats", ctypes.c_void_p),
+        ("predictive_logpdf", ctypes.c_void_p),
+        ("copy_stats", ctypes.c_void_p),
     ]
 
 
 class BOCPDState(ctypes.Structure):
-    """Matches BOCPDState in C (refactored for variable-size stats)"""
+    """Matches BOCPDState in C """
     _fields_ = [
         ("max_run_length", ctypes.c_int32),
         ("obs_model_type", ctypes.c_int),  # enum
@@ -207,7 +207,6 @@ class BOCPDState(ctypes.Structure):
     ]
 
 
-# Enums (must match C)
 # Observation model type enum
 OBS_MODEL_GAUSSIAN_NIG = 0
 OBS_MODEL_STUDENT_T_NG = 1
@@ -216,6 +215,7 @@ OBS_MODEL_POISSON_GAMMA = 3
 OBS_MODEL_BERNOULLI_BETA = 4
 OBS_MODEL_BINOMIAL_BETA = 5
 OBS_MODEL_GAMMA_GAMMA = 6
+# Hazard function type enum
 HAZARD_CONSTANT = 0
 
 
@@ -306,3 +306,85 @@ if _lib is not None:
 def is_c_available():
     """Check if C library is available"""
     return _lib is not None
+
+
+def _require_lib():
+    """
+    Return the loaded C library or raise a helpful error.
+    """
+    if _lib is None:
+        raise RuntimeError(
+            "Fast-BOCPD C extension is not available. "
+            "Build the library with `make build` or install the package."
+        )
+    return _lib
+
+
+def constant_hazard_init(params, lambda_):
+    """
+    Initialize ConstantHazardParams using the C helper.
+    """
+    lib = _require_lib()
+    return lib.constant_hazard_init(ctypes.byref(params), float(lambda_))
+
+
+def bocpd_init(state, obs_model_type, obs_params_ptr, hazard_type,
+               hazard_params_ptr, max_run_length):
+    """
+    Initialize BOCPDState via the C library.
+    """
+    lib = _require_lib()
+    return lib.bocpd_init(
+        ctypes.byref(state),
+        int(obs_model_type),
+        obs_params_ptr,
+        int(hazard_type),
+        hazard_params_ptr,
+        int(max_run_length),
+    )
+
+
+def bocpd_free(state):
+    """Free BOCPDState buffers (no-op if the library is unavailable)."""
+    if _lib is None:
+        return
+    _lib.bocpd_free(ctypes.byref(state))
+
+
+def bocpd_reset(state):
+    """Reset BOCPDState to its prior."""
+    lib = _require_lib()
+    lib.bocpd_reset(ctypes.byref(state))
+
+
+def bocpd_update(state, x, cp_prob=None):
+    """
+    Apply one online update. Optionally pass a ctypes.c_double to receive
+    the changepoint probability.
+    """
+    lib = _require_lib()
+    cp_ptr = ctypes.byref(cp_prob) if cp_prob is not None else None
+    return lib.bocpd_update(ctypes.byref(state), float(x), cp_ptr)
+
+
+def bocpd_batch_update(state, data_ptr, n_obs, cp_probs_ptr):
+    """Apply a batch update with contiguous double buffers."""
+    lib = _require_lib()
+    return lib.bocpd_batch_update(
+        ctypes.byref(state),
+        data_ptr,
+        int(n_obs),
+        cp_probs_ptr,
+    )
+
+
+def bocpd_get_map_run_length(state):
+    """Return the MAP run length for the given state."""
+    lib = _require_lib()
+    return lib.bocpd_get_map_run_length(ctypes.byref(state))
+
+
+def bocpd_get_posterior(state, out_ptr):
+    """Fill ``out_ptr`` (double*) with the run-length posterior."""
+    lib = _require_lib()
+    return lib.bocpd_get_posterior(ctypes.byref(state), out_ptr)

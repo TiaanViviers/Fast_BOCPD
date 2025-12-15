@@ -42,7 +42,9 @@ class BOCPD:
         
         self.obs_model = obs_model
         self.hazard = hazard
-        self.max_run_length = max_run_length
+        self.max_run_length = int(max_run_length)
+        if self.max_run_length <= 0:
+            raise ValueError("max_run_length must be > 0")
         self._state = None
         
         self._init_c_backend()
@@ -121,17 +123,10 @@ class BOCPD:
             raise ValueError(f"Unsupported observation model: {type(self.obs_model)}")
         
         hazard_params = _bindings.ConstantHazardParams()
-        ret = _bindings._lib.constant_hazard_init(
-            ctypes.byref(hazard_params),
-            self.hazard.lambda_
-        )
+        ret = _bindings.constant_hazard_init(hazard_params, self.hazard.lambda_)
         if ret != 0:
             raise RuntimeError("Failed to initialize hazard function")
-        
-        # Validate max_run_length
-        if self.max_run_length <= 0:
-            raise ValueError("max_run_length must be > 0")
-        
+
         # Initialize BOCPD state
         self._state = _bindings.BOCPDState()
         
@@ -139,8 +134,8 @@ class BOCPD:
         obs_params_ptr = ctypes.cast(ctypes.byref(obs_params), ctypes.c_void_p)
         haz_params_ptr = ctypes.cast(ctypes.byref(hazard_params), ctypes.c_void_p)
         
-        ret = _bindings._lib.bocpd_init(
-            ctypes.byref(self._state),
+        ret = _bindings.bocpd_init(
+            self._state,
             obs_model_type,
             obs_params_ptr,
             _bindings.HAZARD_CONSTANT,
@@ -153,9 +148,15 @@ class BOCPD:
             self.close()
             raise RuntimeError("Failed to initialize BOCPD")
     
+    def _require_state(self) -> _bindings.BOCPDState:
+        """Return the live state or raise if closed."""
+        if self._state is None:
+            raise RuntimeError("BOCPD state is not initialized or has been closed")
+        return self._state
+
     def reset(self) -> None:
         """Reset to prior (as if no data has been seen)."""
-        _bindings._lib.bocpd_reset(ctypes.byref(self._state))
+        _bindings.bocpd_reset(self._require_state())
     
     def update(self, x: float) -> Tuple[np.ndarray, float]:
         """
@@ -172,12 +173,9 @@ class BOCPD:
         if isinstance(self.obs_model, (PoissonGamma, BernoulliBeta, BinomialBeta)):
             self.obs_model.validate_data(x)
         
+        state = self._require_state()
         cp_prob = ctypes.c_double()
-        posterior_ptr = _bindings._lib.bocpd_update(
-            ctypes.byref(self._state),
-            float(x),
-            ctypes.byref(cp_prob)
-        )
+        posterior_ptr = _bindings.bocpd_update(state, float(x), cp_prob)
         
         if not posterior_ptr:
             raise RuntimeError("BOCPD update failed")
@@ -208,8 +206,9 @@ class BOCPD:
         
         cp_probs = np.zeros(len(data), dtype=np.float64)
         
-        ret = _bindings._lib.bocpd_batch_update(
-            ctypes.byref(self._state),
+        state = self._require_state()
+        ret = _bindings.bocpd_batch_update(
+            state,
             data.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
             len(data),
             cp_probs.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
@@ -234,7 +233,7 @@ class BOCPD:
             >>> else:
             ...     print(f"Current regime is {map_r} observations old")
         """
-        r_map = _bindings._lib.bocpd_get_map_run_length(ctypes.byref(self._state))
+        r_map = _bindings.bocpd_get_map_run_length(self._require_state())
         if r_map < 0:
             raise RuntimeError("Failed to get MAP run length")
         return r_map
@@ -263,8 +262,8 @@ class BOCPD:
             posterior_r: Array of P(r_t = r | data) for r in [0, max_run_length]
         """
         posterior = np.zeros(self.max_run_length + 1, dtype=np.float64)
-        ret = _bindings._lib.bocpd_get_posterior(
-            ctypes.byref(self._state),
+        ret = _bindings.bocpd_get_posterior(
+            self._require_state(),
             posterior.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
         )
         
@@ -275,13 +274,11 @@ class BOCPD:
     
     def close(self):
         """Explicitly free C resources (recommended for deterministic cleanup)."""
-        if hasattr(self, '_state') and self._state is not None:
-            lib = getattr(_bindings, '_lib', None)
-            if lib is not None:
-                try:
-                    lib.bocpd_free(ctypes.byref(self._state))
-                except Exception:
-                    pass
+        if getattr(self, "_state", None) is not None:
+            try:
+                _bindings.bocpd_free(self._state)
+            finally:
+                self._state = None
             self._state = None
         
         # Clean up grid arrays if present
@@ -301,17 +298,12 @@ class BOCPD:
     
     def __del__(self):
         """Cleanup C resources (fallback if close() not called)."""
-        # Safe cleanup during interpreter shutdown
-        st = getattr(self, "_state", None)
-        lib = getattr(_bindings, "_lib", None)
-        if st is not None and lib is not None:
-            try:
-                lib.bocpd_free(ctypes.byref(st))
-            except Exception:
-                pass
+        try:
+            self.close()
+        except Exception:
+            pass
 
 
 def is_available() -> bool:
     """Check if C library is available."""
     return _bindings.is_c_available()
-

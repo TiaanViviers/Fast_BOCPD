@@ -1,204 +1,189 @@
-Choosing the Right Model
-=========================
+Choosing the Right Observation Model
+====================================
 
-Fast-BOCPD supports 7 different observation models. The right choice depends on your data type and characteristics.
+Fast-BOCPD packages each conjugate likelihood–prior pair as a Python class
+(``fast_bocpd.models``). Selecting the right model ensures changepoint
+probabilities reflect the structure of your data. This chapter ties the
+statistical assumptions to concrete data characteristics and points out
+how our implementation names these concepts.
 
-Quick Decision Tree
+Quick Decision Path
 -------------------
 
-Use this flowchart to quickly choose a model:
+1. **Identify the measurement type**
 
-1. **What type of data do you have?**
-   
-   - **Continuous** (prices, temperatures, measurements) → Go to step 2
-   - **Count data** (events per hour, clicks, failures) → :class:`~fast_bocpd.PoissonGamma`
-   - **Binary** (yes/no, success/fail, 0/1) → :class:`~fast_bocpd.BernoulliBeta`
-   - **Proportions** (conversion rates, percentages with known N) → :class:`~fast_bocpd.BinomialBeta`
-   - **Positive continuous** (durations, sizes, strictly > 0) → :class:`~fast_bocpd.GammaGamma`
+   * **Binary** (0/1 outcomes) → :class:`fast_bocpd.BernoulliBeta`
+   * **Proportion** (successes out of known :math:`N`) →
+     :class:`fast_bocpd.BinomialBeta`
+   * **Counts** (integers ≥ 0) → :class:`fast_bocpd.PoissonGamma`
+   * **Positive continuous** (strictly > 0) → :class:`fast_bocpd.GammaGamma`
+   * **General continuous** →
+     :class:`fast_bocpd.GaussianNIG` or :class:`fast_bocpd.StudentTNG`
 
-2. **For continuous data: Does your data have outliers?**
-   
-   - **Yes** (or unsure) → :class:`~fast_bocpd.StudentTNG`
-   - **No** (clean, normally distributed) → :class:`~fast_bocpd.GaussianNIG`
+2. **For continuous data, assess tail behaviour**
 
-3. **For count data with large λ (mean > 20):**
-   
-   - Can approximate with :class:`~fast_bocpd.GaussianNIG` (faster)
-   - Or use :class:`~fast_bocpd.PoissonGamma` (exact, slower)
+   * *Well-behaved / normal-like* → Gaussian-NIG
+   * *Outliers or fat tails* → Student-t (fixed ``nu``)
+   * *Unknown tail heaviness* → Student-t (grid ``nu``)
 
-Model Comparison Table
-----------------------
+3. **For high-count Poisson data (λ > ~20)** you may approximate with
+   Gaussian-NIG if speed is more critical than an exact count model.
 
-+------------------+------------------+----------------+------------------+-------------+
-| Model            | Data Type        | Robustness     | Speed (obs/sec)  | Use When    |
-+==================+==================+================+==================+=============+
-| GaussianNIG      | Continuous       | Low            | ~25,000          | Clean data  |
-+------------------+------------------+----------------+------------------+-------------+
-| StudentTNG       | Continuous       | **High**       | ~22,000          | Outliers    |
-| (fixed ν)        |                  |                |                  |             |
-+------------------+------------------+----------------+------------------+-------------+
-| StudentTNG       | Continuous       | **Very High**  | ~3,500           | Unknown     |
-| (grid ν)         |                  |                |                  | tail shape  |
-+------------------+------------------+----------------+------------------+-------------+
-| PoissonGamma     | Count (≥0)       | Medium         | ~21,000          | Small λ     |
-+------------------+------------------+----------------+------------------+-------------+
-| BernoulliBeta    | Binary (0/1)     | N/A            | ~34,000          | Coin flips  |
-+------------------+------------------+----------------+------------------+-------------+
-| BinomialBeta     | Proportion (k/N) | N/A            | ~15,000          | Conversion  |
-|                  |                  |                |                  | rates       |
-+------------------+------------------+----------------+------------------+-------------+
-| GammaGamma       | Positive         | Medium         | ~24,000          | Durations   |
-|                  | continuous       |                |                  |             |
-+------------------+------------------+----------------+------------------+-------------+
+Model Comparison Snapshot
+-------------------------
 
-Detailed Model Guide
---------------------
+Throughput numbers are taken from :doc:`../benchmarks/results` (100k
+observations, online mode) to give a sense of relative cost.
 
-Gaussian (Normal-Inverse-Gamma)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+.. list-table::
+   :header-rows: 1
+   :widths: 18 22 18 18 24
 
-**Statistical Model:**
+   * - Model
+     - Data type
+     - Robustness
+     - Throughput (obs/s)
+     - Typical use
+   * - GaussianNIG
+     - Continuous
+     - Low
+     - 25,063
+     - Clean sensor data
+   * - StudentTNG (fixed ν)
+     - Continuous
+     - High
+     - 21,796
+     - Financial returns
+   * - StudentTNG (ν grid)
+     - Continuous
+     - Very high
+     - 3,471
+     - Unknown tail heaviness
+   * - PoissonGamma
+     - Counts
+     - Medium
+     - 21,402
+     - Event rates
+   * - BernoulliBeta
+     - Binary
+     - Exact
+     - 33,573
+     - Success/failure streams
+   * - BinomialBeta
+     - Proportions (k/N)
+     - Exact
+     - 14,599
+     - Conversion rates
+   * - GammaGamma
+     - Positive continuous
+     - Medium
+     - 24,290
+     - Durations / amounts
 
-.. math::
+Observation Model Details
+-------------------------
 
-   x_t | \mu, \sigma^2 &\sim \mathcal{N}(\mu, \sigma^2) \\\\
-   \mu, \sigma^2 &\sim \text{NIG}(\mu_0, \kappa_0, \alpha_0, \beta_0)
+Each class mirrors the notation in :doc:`../theory/conjugate_priors` and
+maps cleanly to a C implementation under ``fast_bocpd/_c``. Below are the
+key considerations and tuning tips per model.
 
-**When to use:**
+GaussianNIG (``GaussianNIG``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-- Continuous data with no outliers
-- Data is approximately bell-shaped (normal distribution)
-- You need maximum speed
-- Variance is roughly constant within segments
+*Assumptions:* iid Gaussian within each regime with unknown mean and
+variance. Hyperparameters ``mu0``, ``kappa0``, ``alpha0``, ``beta0`` match
+the Normal-Inverse-Gamma prior.
 
-**Strengths:**
+*Use when:* data are continuous, roughly bell-shaped, and you value
+maximum throughput.
 
-✅ Fastest model (~25,000 obs/sec)
-✅ Mathematically elegant (conjugate prior)
-✅ Well-understood, widely used
+*Tips:*
 
-**Weaknesses:**
+* Center data around zero and set ``mu0`` accordingly.
+* ``kappa0=1`` keeps the prior weak; increasing it enforces a tighter
+  belief about the mean.
+* Larger ``alpha0`` / ``beta0`` shrink the variance towards a prior guess.
 
-❌ Very sensitive to outliers (even 1-2 outliers can trigger false alarms)
-❌ Assumes constant variance (not great for volatility changes)
+StudentTNG (``StudentTNG``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-**Example:**
+*Assumptions:* Student-t likelihood obtained via a Normal-Gamma prior.
+Supports **fixed** ``nu`` or a **grid** of ν values. Our implementation
+stores a flag ``is_grid`` so the C layer knows whether to dispatch to
+``student_t_ng.c`` or ``student_t_ng_grid.c``.
 
-.. code-block:: python
+*Use when:* data contain sporadic outliers or heavy tails.
 
-   model = GaussianNIG(
-       mu0=0.0,      # Prior mean (center data around 0)
-       kappa0=1.0,   # Prior precision (1.0 = weak prior)
-       alpha0=1.0,   # Prior shape for variance
-       beta0=1.0     # Prior scale for variance
-   )
+*Choosing ν:*
 
-**Real-world use cases:**
+* ``nu=1`` behaves like Cauchy (extreme robustness, slower adaptation).
+* ``nu=3`` is a good default for financial/operational data.
+* Grid mode allows ``nu=[2, 3, 5, 10, 20]`` with optional ``nu_prior`` if
+  you want the algorithm to learn the right tail heaviness at runtime.
 
-- Temperature sensor data
-- Quality control measurements (stable process)
-- Pre-processed financial returns (outliers removed)
-- Any "well-behaved" continuous data
+PoissonGamma (``PoissonGamma``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-**Tuning tips:**
+*Assumptions:* Counts per unit time with a Gamma prior on the rate
+``lambda``. Parameters ``alpha0``/``beta0`` correspond to prior event
+counts and exposure.
 
-- Set ``mu0`` to the expected mean of your data
-- Start with ``kappa0=1.0`` (weak prior), increase if you have strong prior knowledge
-- ``alpha0`` and ``beta0`` control variance prior: higher values = stronger prior
+*Use when:* you observe integer counts (clicks, failures, arrivals) and
+need exact handling of discrete jumps. Offline mode is especially fast for
+this model due to vectorised log-factorials in C.
 
-Student-t (Normal-Gamma)
-~~~~~~~~~~~~~~~~~~~~~~~~~
+BernoulliBeta (``BernoulliBeta``) & BinomialBeta (``BinomialBeta``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-**Statistical Model:**
+*Assumptions:* Binary outcomes or aggregate successes out of ``n_trials``.
+These models share identical sufficient statistics (counts of successes
+and total trials). Binomial-Beta exposes ``n_trials`` (via
+``n_trials`` attribute) and automatically caches ``log_N_factorial`` in the
+C layer for numerical stability.
 
-.. math::
+*Use when:* dealing with conversion rates, A/B tests, or thresholded
+signals.
 
-   x_t | \mu, \sigma^2, \nu &\sim \text{Student-t}(\mu, \sigma^2, \nu) \\\\
-   \mu, \sigma^2 &\sim \text{NG}(\mu_0, \kappa_0, \alpha_0, \beta_0)
+GammaGamma (``GammaGamma``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-**When to use:**
+*Assumptions:* Positive continuous data with fixed shape parameter ``shape``.
+Useful for dwell times, monetary amounts, or any strictly-positive metric.
 
-- Continuous data that may have outliers
-- Financial data (returns often have fat tails)
-- Sensor data with occasional glitches
-- When robustness is more important than speed
+*Use when:* the distribution is skewed (right tail) but strictly positive.
+Because the shape is fixed, choose ``shape=1`` for exponential-like data
+or >1 for more symmetric positive data.
 
-**Strengths:**
+Hazard Function Interaction
+---------------------------
 
-✅ Robust to outliers (heavy tails)
-✅ Still very fast (~22,000 obs/sec for fixed ν)
-✅ Can infer tail heaviness from data (grid mode)
-✅ Degrades gracefully to Gaussian as ν→∞
+Observation models specify *how* data behave between changepoints; the
+hazard function (``fast_bocpd.hazard.ConstantHazard``) specifies *when*
+changepoints occur on average. The two interact via the BOCPD recursion:
 
-**Weaknesses:**
+* High hazards (small ``lambda_``) expect frequent regime changes. Use
+  them when your metrics fluctuate often (e.g., user traffic with daily
+  resets).
+* Low hazards (large ``lambda_``) assume long, stable runs. Pair them with
+  robust models (Student-t) to avoid false positives when rare outliers
+  appear.
 
-❌ Grid mode is slower (~3,500 obs/sec)
-❌ One more parameter to tune (ν)
+Practical Recommendations
+-------------------------
 
-**Two modes:**
+1. Start with either GaussianNIG or StudentTNG depending on outlier
+   expectations. Switch to discrete models only when your data type
+   demands it.
+2. Keep priors weak (`kappa0 = alpha0 = beta0 = 1`) while prototyping.
+   Tighten them only if you have domain knowledge.
+3. Use grid Student-t sparingly; reserve it for critical applications
+   where robustness matters more than throughput.
+4. For proportions with a large denominator (``n_trials >= 50``), consider
+   whether a Gaussian approximation is sufficient—Binomial-Beta is exact
+   but slower.
 
-1. **Fixed ν** (when you know tail shape):
-
-.. code-block:: python
-
-   model = StudentTNG(
-       mu0=0.0, kappa0=1.0, alpha0=1.0, beta0=1.0,
-       nu=3.0  # Fixed degrees of freedom
-   )
-
-2. **Grid ν** (let model choose):
-
-.. code-block:: python
-
-   model = StudentTNG(
-       mu0=0.0, kappa0=1.0, alpha0=1.0, beta0=1.0,
-       nu=[2, 3, 5, 10, 20]  # Try multiple ν values
-   )
-
-**Choosing ν (degrees of freedom):**
-
-- ``ν = 1``: Cauchy distribution (extreme outliers, very heavy tails)
-- ``ν = 2-3``: Financial returns, heavy-tailed data
-- ``ν = 4-6``: Moderate outliers
-- ``ν = 10-20``: Mild outliers, closer to Gaussian
-- ``ν → ∞``: Approaches Gaussian (no extra robustness)
-
-**Rule of thumb:** Start with ``nu=3`` or ``nu=[2, 3, 5, 10]`` for grid mode.
-
-**Real-world use cases:**
-
-- Stock returns (fat tails)
-- Network latency (occasional spikes)
-- User engagement metrics (power users create outliers)
-- Any data where "rare but extreme" events occur
-
-Poisson (Gamma Prior)
-~~~~~~~~~~~~~~~~~~~~~~
-
-**Statistical Model:**
-
-.. math::
-
-   x_t | \lambda &\sim \text{Poisson}(\lambda) \\\\
-   \lambda &\sim \text{Gamma}(\alpha_0, \beta_0)
-
-**When to use:**
-
-- Count data (non-negative integers)
-- Events per time period
-- Rate estimation problems
-- λ < 20 (for larger λ, Gaussian is faster and equivalent)
-
-**Strengths:**
-
-✅ Exact model for count data (no approximation)
-✅ Fast (~21,000 obs/sec)
-✅ Natural for event rate changes
-
-**Weaknesses:**
-
-❌ Only for count data (not continuous)
-❌ Assumes events are independent
+For a full statistical comparison and benchmark numbers, refer to
+:doc:`../theory/model_comparison` and :doc:`../benchmarks/results`.
 
 **Example:**
 
@@ -240,13 +225,13 @@ Bernoulli (Beta Prior)
 
 **Strengths:**
 
-✅ Fastest model (~34,000 obs/sec)
-✅ Perfect for A/B testing changepoint detection
-✅ Simple, interpretable
+- Fastest model (~34,000 obs/sec)
+- Perfect for A/B testing changepoint detection
+- Simple, interpretable
 
 **Weaknesses:**
 
-❌ Only for binary data
+Only for binary data
 
 **Example:**
 
@@ -288,9 +273,9 @@ Binomial (Beta Prior)
 
 **Strengths:**
 
-✅ Generalizes Bernoulli (Bernoulli is Binomial with N=1)
-✅ Fast (~15,000 obs/sec)
-✅ Natural for proportion changepoints
+- Generalizes Bernoulli (Bernoulli is Binomial with N=1)
+- Fast (~15,000 obs/sec)
+- Natural for proportion changepoints
 
 **Example:**
 
@@ -331,13 +316,13 @@ Gamma (Gamma Prior)
 
 **Strengths:**
 
-✅ Flexible (can model various shapes)
-✅ Fast (~24,000 obs/sec)
-✅ Conjugate prior (efficient updates)
+- Flexible (can model various shapes)
+- Fast (~24,000 obs/sec)
+- Conjugate prior (efficient updates)
 
 **Weaknesses:**
 
-❌ Requires choosing fixed shape parameter k
+Requires choosing fixed shape parameter k
 
 **Example:**
 
@@ -360,23 +345,23 @@ Common Mistakes to Avoid
 
 1. **Using Gaussian for count data**
    
-   ❌ ``data = [1, 2, 3, ...]`` with ``GaussianNIG``
-   ✅ Use ``PoissonGamma`` for counts
+   ``data = [1, 2, 3, ...]`` with ``GaussianNIG``
+   Use ``PoissonGamma`` for counts
 
 2. **Using Poisson for continuous data**
-   
-   ❌ ``data = [1.5, 2.3, 3.7, ...]`` with ``PoissonGamma``
-   ✅ Use ``GaussianNIG`` or ``StudentTNG``
+
+   ``data = [1.5, 2.3, 3.7, ...]`` with ``PoissonGamma``
+   Use ``GaussianNIG`` or ``StudentTNG``
 
 3. **Ignoring outliers**
-   
-   ❌ Financial data with ``GaussianNIG`` (will false alarm on every outlier)
-   ✅ Use ``StudentTNG`` for robustness
+
+   Financial data with ``GaussianNIG`` (will false alarm on every outlier)
+   Use ``StudentTNG`` for robustness
 
 4. **Grid ν without need**
-   
-   ❌ Using ``nu=[2,3,5,10,20]`` when fixed ``nu=3`` is fine
-   ✅ Grid mode is 6x slower; use only if tail shape is very uncertain
+
+   Using ``nu=[2,3,5,10,20]`` when fixed ``nu=3`` is fine
+   Grid mode is 6x slower; use only if tail shape is very uncertain
 
 When in Doubt
 -------------

@@ -6,8 +6,8 @@ The actual implementation is in C, these are just Python wrappers for validation
 
 
 class ConstantHazard:
-    """
-    Constant hazard function: H = 1 / lambda\_.
+    r"""
+    Constant hazard function: :math:`H = 1 / \lambda`.
 
     At each time step, independent of the current run length r:
         P(changepoint)  = H
