@@ -118,8 +118,6 @@ Documentation Contents
    :caption: Examples
 
    examples/stock_volatility
-   examples/sensor_monitoring
-   examples/ab_testing
 
 .. toctree::
    :maxdepth: 2

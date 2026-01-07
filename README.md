@@ -1,218 +1,248 @@
 # Fast BOCPD
 
-Fast, C-based Bayesian Online Changepoint Detection for Python.
+[![PyPI version](https://badge.fury.io/py/fast-bocpd.svg)](https://pypi.org/project/fast-bocpd/)
+[![Python](https://img.shields.io/pypi/pyversions/fast-bocpd.svg)](https://pypi.org/project/fast-bocpd/)
+[![License](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+[![Documentation](https://img.shields.io/badge/docs-read%20the%20docs-blue.svg)](https://fast-bocpd.readthedocs.io)
 
-## Features
+High-performance Bayesian Online Changepoint Detection (BOCPD) with a pure C backend and clean Python API. Achieve **10-1500x speedup** over existing implementations while maintaining numerical accuracy.
 
-- **Pure C implementation** for maximum performance
-- **Clean Python API** via ctypes (zero dependencies beyond NumPy)
-- **Online and batch processing** modes
-- **Model-agnostic architecture** - easy to extend with new models
+## Key Features
+
+- **Exceptional Performance**: 10-1500x faster than competing implementations
+- **Production Ready**: Extensively tested with 98 C unit tests and 359 Python test cases
+- **Comprehensive Model Library**: 7 observation models covering continuous, discrete, and count data
+- **Dual Processing Modes**: Online streaming and batch processing (Offline mode)
+- **Minimal Dependencies**: Only requires NumPy
+- **Well Documented**: Complete Sphinx documentation with examples and theory
+- **Benchmarked**: Rigorous performance comparisons against 5 major implementations
+
+## Performance Benchmarks
+
+Comparative performance on 100,000 observations:
+
+| Library | Language | Throughput | vs Fast-BOCPD |
+|---------|----------|------------|---------------|
+| **Fast-BOCPD** | **C** | **25,952 obs/s** | **1.0x (baseline)** |
+| promised-ai | Rust | 915 obs/s | 28.3x slower |
+| ruptures | Cython/C | 2,564 obs/s* | 10.1x slower* |
+| dtolpin | Python | 163 obs/s | 159.2x slower |
+| hildensia | PyTorch | 17 obs/s** | 1,525x slower** |
+
+See [benchmarks/](benchmarks/) for detailed methodology and results.
 
 ## Installation
-
-### From PyPI (when published)
 
 ```bash
 pip install fast-bocpd
 ```
 
-### From source
+The C extension is automatically compiled during installation. Requires a C compiler and NumPy.
+
+### From Source
 
 ```bash
-# Clone the repository
-git clone https://github.com/yourusername/Fast_BOCPD.git
+git clone https://github.com/TiaanViviers/Fast_BOCPD.git
 cd Fast_BOCPD
-
-# Install with pip (automatically compiles C code)
 pip install -e .
 ```
 
-### Development mode
-
-If you're developing and want to manually rebuild the C library:
-
-```bash
-cd fast_bocpd/_c
-make clean
-make lib
-```
-
-**Note:** The C library will be automatically compiled during `pip install`. You only need manual compilation if you're actively developing the C code.
-
 ## Quick Start
 
-```python
-from fast_bocpd import BOCPD, GaussianNIG, ConstantHazard
-import numpy as np
+### Basic Usage
 
-# Set up the model
+```python
+import numpy as np
+from fast_bocpd import BOCPD, GaussianNIG, ConstantHazard
+
+# Generate synthetic data with a changepoint
+np.random.seed(42)
+data = np.concatenate([
+    np.random.normal(0, 1, 100),
+    np.random.normal(5, 1, 100)
+])
+
+# Configure the model
 obs_model = GaussianNIG(mu0=0.0, kappa0=1.0, alpha0=1.0, beta0=1.0)
 hazard = ConstantHazard(lambda_=100)  # Expected run length = 100
 bocpd = BOCPD(obs_model, hazard, max_run_length=200)
 
-# Online mode - process one observation at a time
-for x in data_stream:
+# Process data and detect changepoints
+for t, x in enumerate(data):
     posterior_r, cp_prob = bocpd.update(x)
     if cp_prob > 0.5:
-        print(f"Changepoint detected! Probability: {cp_prob:.3f}")
-
-# Offline mode - process all data at once
-cp_probs = bocpd.batch_update(data_array)
+        print(f"Changepoint detected at t={t} (probability: {cp_prob:.3f})")
 ```
 
-### Using OnlineChangeDetector (Recommended for Streaming)
+### Streaming Detection with OnlineChangeDetector
 
 ```python
-from fast_bocpd import BOCPD, GaussianNIG, ConstantHazard, OnlineChangeDetector
+from fast_bocpd import BOCPD, StudentTNG, ConstantHazard, OnlineChangeDetector
 
-# Setup
-bocpd = BOCPD(GaussianNIG(...), ConstantHazard(100))
+# Setup detector
+obs_model = StudentTNG(mu0=0.0, kappa0=1.0, alpha0=1.0, beta0=1.0)
+hazard = ConstantHazard(lambda_=100)
+bocpd = BOCPD(obs_model, hazard)
 detector = OnlineChangeDetector(bocpd, min_confidence=0.3)
 
 # Process streaming data
 for t, observation in enumerate(data_stream):
-    cp = detector.update(observation, metadata=f"sample_{t}")
+    cp = detector.update(observation)
     
     if cp:
-        print(f"Changepoint at t={cp.index}: previous segment lasted {cp.prev_run_length} steps")
-    
-    # Check current run length
-    run_length = detector.get_current_run_length()
-    
-# Get all detected changepoints and segments
+        print(f"Changepoint at t={cp.index}")
+        print(f"Previous segment: {cp.prev_run_length} observations")
+        print(f"Confidence: {cp.confidence:.3f}")
+
+# Retrieve all detected changepoints
 changepoints = detector.get_changepoints()
 segments = detector.get_segments()
 ```
 
-## Project Structure
+### Batch Processing
 
-```
-Fast_BOCPD/
-├── fast_bocpd/
-│   ├── __init__.py              # Public API
-│   ├── bocpd_accelerated.py     # Python wrapper for C implementation
-│   ├── _bindings.py             # ctypes bindings to C library
-│   ├── hazard.py                # Hazard function parameter wrappers
-│   ├── obs_models/              # Observation model parameter wrappers
-│   │   ├── __init__.py
-│   │   └── gaussian_nig.py
-│   └── _c/                      # C implementation
-│       ├── bocpd_core.c/h       # Main BOCPD algorithm
-│       ├── gaussian_nig.c/h     # GaussianNIG model
-│       ├── hazard.c/h           # Hazard functions
-│       ├── test_modules.c       # C unit tests
-│       ├── Makefile
-│       └── libbocpd.so          # Compiled shared library
-└── test_bocpd.ipynb             # Example notebook
+```python
+# Process entire dataset at once
+cp_probs = bocpd.batch_update(data)
 
+# Find changepoint locations
+changepoints = np.where(cp_probs > 0.5)[0]
+print(f"Changepoints detected at: {changepoints}")
 ```
 
 ## Available Models
 
 ### Observation Models
-- **GaussianNIG**: 1D Gaussian with Normal-Inverse-Gamma prior
+
+**Continuous Data:**
+- `GaussianNIG`: Gaussian likelihood with Normal-Inverse-Gamma conjugate prior
+- `StudentTNG`: Student-t likelihood with Normal-Gamma conjugate prior (robust to outliers)
+- `StudentTNGGrid`: Grid-based Student-t for faster inference with controlled precision
+
+**Discrete Data:**
+- `BernoulliBeta`: Bernoulli likelihood (binary outcomes) with Beta conjugate prior
+- `BinomialBeta`: Binomial likelihood (count of successes) with Beta conjugate prior
+
+**Count Data:**
+- `PoissonGamma`: Poisson likelihood (rare events) with Gamma conjugate prior
+- `GammaGamma`: Gamma likelihood with Gamma conjugate prior (positive continuous data)
 
 ### Hazard Functions
-- **ConstantHazard**: Constant changepoint probability
 
-## Development
+- `ConstantHazard`: Constant changepoint probability (geometric prior on run lengths)
 
-### Quick Start
+All models feature efficient conjugate Bayesian updates implemented in optimized C code.
+
+## Documentation
+
+Complete documentation is available at [https://fast-bocpd.readthedocs.io](https://fast-bocpd.readthedocs.io)
+
+**Documentation includes:**
+- Getting Started Guide
+- User Guide with detailed model descriptions
+- API Reference
+- Mathematical Theory and Derivations
+- Example Notebooks
+- Architecture and Implementation Details
+- Benchmark Results and Methodology
+
+**Example Notebooks:**
+- [01_quickstart.ipynb](examples/01_quickstart.ipynb) - Basic usage and concepts
+- [02_online_vs_batch.ipynb](examples/02_online_vs_batch.ipynb) - Processing mode comparison
+- [03_understanding_outputs.ipynb](examples/03_understanding_outputs.ipynb) - Interpreting results
+- [04_1_univariate_models.ipynb](examples/04_1_univariate_models.ipynb) - Continuous data models
+- [04_2_multivariate_models.ipynb](examples/04_2_multivariate_models.ipynb) - Discrete and count models
+- [04_3_hazard_and_run_length.ipynb](examples/04_3_hazard_and_run_length.ipynb) - Prior configuration
+- [05_advanced_features.ipynb](examples/05_advanced_features.ipynb) - Advanced usage patterns
+- [06_real_world_example.ipynb](examples/06_real_world_example.ipynb) - Financial time series analysis
+
+## Testing
+
+Fast-BOCPD is extensively tested to ensure correctness and reliability:
+
+- **98 C unit tests**: Core algorithm and model implementations
+- **359 Python tests**: API, integration, and end-to-end workflows
+- **Numerical validation**: Results verified against reference implementations
+- **Edge case coverage**: Boundary conditions and error handling
+
+Run the test suite:
 
 ```bash
-# Clone the repository
-git clone https://github.com/yourusername/Fast_BOCPD.git
-cd Fast_BOCPD
-
 # Run all tests
 make test
 
-# Or run separately
-make test-c       # C unit tests
-make test-python  # Python integration tests
+# C unit tests only
+make test-c
 
-# Build shared library for development
+# Python tests only
+make test-python
+```
+
+## Development
+
+### Build from Source
+
+```bash
+git clone https://github.com/TiaanViviers/Fast_BOCPD.git
+cd Fast_BOCPD
+
+# Install in development mode
+pip install -e .
+
+# Build C library manually (optional)
 make lib
 
-# Clean build artifacts
-make clean
+# Run tests
+make test
 ```
-
-### Development Workflow
-
-1. **Edit C code**: Modify files in `fast_bocpd/_c/`
-2. **Test changes**: Run `make test`
-3. **Install for Python**: Run `pip install -e .`
-
-### Test Structure
-
-```
-tests/
-├── python/                    # Python integration tests
-│   ├── test_api.py            # Public API & user interface
-│   ├── test_models.py         # Model parameter validation
-│   ├── test_hazard.py         # Hazard parameter validation
-│   └── test_integration.py    # End-to-end integration tests
-└── c_tests/                   # C unit tests
-    ├── test_utils.h           # Test utilities & macros
-    ├── test_gaussian_nig.c    # GaussianNIG tests
-    ├── test_hazard.c          # Hazard function tests
-    ├── test_bocpd_core.c      # BOCPD algorithm tests
-    └── test_runner.c          # Test suite runner
-```
-
-### Build System
-
-All build artifacts are placed in `build/`:
-```
-build/
-├── lib/          # Compiled libraries
-└── obj/          # Object files
-```
-
-The root `Makefile` provides:
-- `make lib` - Build shared library
-- `make test` - Run all tests
-- `make clean` - Remove all artifacts
 
 ### Project Structure
 
 ```
 Fast_BOCPD/
-├── fast_bocpd/                  # Implementation (shipped to users)
-│   ├── __init__.py              # Public API
-│   ├── bocpd_accelerated.py     # Python wrapper
-│   ├── _bindings.py             # ctypes bindings
-│   ├── hazard.py                # Hazard function wrappers
-│   ├── models.py                # Observation model wrappers
-│   └── _c/                      # C implementation
-│       ├── bocpd_core.c/h       # Main BOCPD algorithm
-│       ├── gaussian_nig.c/h     # GaussianNIG model
-│       ├── hazard.c/h           # Hazard functions
-│       └── Makefile             # For dev builds only
-├── tests/                       # Testing (not shipped)
-│   ├── test_bocpd.py            # Python unit tests
-│   └── c_tests/
-│       ├── test_modules.c       # C unit tests
-│       └── Makefile
-├── setup.py
-├── pyproject.toml
-└── README.md
+├── fast_bocpd/           # Python package
+│   ├── core.py           # Main BOCPD class
+│   ├── models.py         # Observation models
+│   ├── hazard.py         # Hazard functions
+│   ├── utils.py          # Helper utilities
+│   ├── _bindings.py      # C extension bindings
+│   └── _c/               # C implementation
+│       ├── bocpd_core.c
+│       ├── gaussian_nig.c
+│       ├── student_t_ng.c
+│       └── ...
+├── tests/                # Test suite
+│   ├── python/           # Python integration tests
+│   └── c_tests/          # C unit tests
+├── examples/             # Jupyter notebooks
+├── docs/                 # Sphinx documentation
+├── benchmarks/           # Performance comparisons
+└── Makefile              # Build system
 ```
 
-## Performance
+## Algorithm
 
-The C implementation provides significant speedup over pure Python implementations while maintaining numerical accuracy.
+Fast-BOCPD implements the Bayesian Online Changepoint Detection algorithm (Adams & MacKay, 2007). The algorithm:
+
+1. Maintains a distribution over run lengths (time since last changepoint)
+2. Updates beliefs online as new data arrives
+3. Provides probabilistic changepoint detection without threshold tuning
+4. Supports arbitrary observation models via conjugate Bayesian updates
+
+The implementation uses dynamic programming with efficient log-space computations to maintain numerical stability.
+
 
 ## License
 
-MIT License
+This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
 
-## Citation
+## Links
 
-If you use this library, please cite:
-```
-Adams, R. P., & MacKay, D. J. (2007). Bayesian online changepoint detection.
-arXiv preprint arXiv:0710.3742.
-```
+- **PyPI**: https://pypi.org/project/fast-bocpd/
+- **Documentation**: https://fast-bocpd.readthedocs.io
+- **Source Code**: https://github.com/TiaanViviers/Fast_BOCPD
+- **Issue Tracker**: https://github.com/TiaanViviers/Fast_BOCPD/issues
+
+## Acknowledgments
+
+This implementation is based on the foundational work by Adams and MacKay (2007). Performance optimizations and the C backend were developed to enable real-time changepoint detection in production systems
