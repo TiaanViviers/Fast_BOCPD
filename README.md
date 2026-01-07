@@ -3,7 +3,7 @@
 [![PyPI version](https://badge.fury.io/py/fast-bocpd.svg)](https://pypi.org/project/fast-bocpd/)
 [![Python](https://img.shields.io/pypi/pyversions/fast-bocpd.svg)](https://pypi.org/project/fast-bocpd/)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
-[![Documentation](https://img.shields.io/badge/docs-read%20the%20docs-blue.svg)](https://fast-bocpd.readthedocs.io)
+[![Documentation](https://img.shields.io/badge/docs-read%20the%20docs-blue.svg)](https://fast-bocpd.readthedocs.io/en/latest/)
 
 High-performance Bayesian Online Changepoint Detection (BOCPD) with a pure C backend and clean Python API. Achieve **10-1500x speedup** over existing implementations while maintaining numerical accuracy.
 
@@ -135,7 +135,7 @@ All models feature efficient conjugate Bayesian updates implemented in optimized
 
 ## Documentation
 
-Complete documentation is available at [https://fast-bocpd.readthedocs.io](https://fast-bocpd.readthedocs.io)
+Complete documentation is available at [https://fast-bocpd.readthedocs.io/en/latest/](https://fast-bocpd.readthedocs.io/en/latest/)
 
 **Documentation includes:**
 - Getting Started Guide
